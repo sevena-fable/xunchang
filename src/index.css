@@ -1,0 +1,74 @@
+/* 引入 Tailwind CSS 全部样式能力 */
+@import "tailwindcss";
+
+/* 全局字体:衬线体更有书信的温度 */
+body {
+  font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+}
+
+/* 羽毛轻轻浮动 */
+.feather-float {
+  animation: feather-float 4s ease-in-out infinite;
+}
+@keyframes feather-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(4deg); }
+}
+
+/* ===== 阶段四：窗台场景动画 ===== */
+
+/* 鸽子站着时轻轻起伏，像在呼吸 */
+.pigeon-bob {
+  animation: pigeon-bob 3.2s ease-in-out infinite;
+}
+@keyframes pigeon-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+/* 天空中缓缓漂移的柔云（半透明白色光团） */
+.cloud-drift {
+  position: absolute;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0));
+  border-radius: 50%;
+  filter: blur(4px);
+  animation-name: cloud-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+@keyframes cloud-drift {
+  from { transform: translateX(-30%); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  to { transform: translateX(320%); opacity: 0; }
+}
+
+/* 桌面光斑的明暗呼吸，像阳光穿过树叶 */
+.light-breathe {
+  animation: light-breathe 8s ease-in-out infinite;
+}
+@keyframes light-breathe {
+  0%, 100% { opacity: 0.02; }
+  50% { opacity: 0.16; }
+}
+
+/* 夜空星星的闪烁 */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* 桌上有新信时，那颗火漆小封蜡的心跳 */
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 1px 6px rgba(60,20,10,0.45), 0 0 0 1.5px rgba(255,244,225,0.75), 0 0 0 0 rgba(200,90,60,0.5); }
+  50% { transform: scale(1.1); box-shadow: 0 1px 6px rgba(60,20,10,0.45), 0 0 0 1.5px rgba(255,244,225,0.75), 0 0 0 8px rgba(200,90,60,0); }
+}
+
+/* 弹窗内的滚动条：细一点、淡一点，不抢戏 */
+.thin-scroll::-webkit-scrollbar { width: 6px; }
+.thin-scroll::-webkit-scrollbar-track { background: transparent; }
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(120, 100, 70, 0.28);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover { background: rgba(120, 100, 70, 0.45); }
