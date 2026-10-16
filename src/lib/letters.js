@@ -1,81 +1,92 @@
-// 信件相关的所有数据库动作，都收在这里
-// 组件只负责"好看"，规则和写库都在这一层，避免同一条规则散落在好几个文件里。
 import { supabase } from './supabase'
-import { otherSide, arrivePigeon } from './pigeon'
+import { fileHash, imagePath, IMAGE_EXTENSIONS, validateAttachments } from './letterImages'
 
-// 四种回应表情（规则 5：只有这四种）
-export const REACTIONS = [
-  { key: 'coffee', icon: '☕', label: '下次聊聊' },
-  { key: 'heart', icon: '❤️', label: '喜欢' },
-  { key: 'thumb', icon: '👍', label: '点赞' },
-  { key: 'dog', icon: '🐶', label: '狗头' },
-]
+const bucket = supabase.storage.from('letter-images')
 
-export function reactionOf(key) {
-  return REACTIONS.find((r) => r.key === key)
+function failure(error, confirmedNotSent = false) {
+  return Object.assign(new Error(error.message || String(error)), { confirmedNotSent })
 }
 
-// 新增一封信。deliver=true 表示直接寄出（已送达），否则只是封存在自己桌上。
-// images 字段是阶段六才加的列，万一数据库还没升级，这里会自动退回"不带图片"再存一次，
-// 免得整封信都写不进去。
-export async function insertLetter({ pairId, userId, content, stationery, images = [], deliver }) {
+async function findLetter(id) {
+  const { data, error } = await supabase.from('letters').select('*').eq('id', id).maybeSingle().abortSignal(AbortSignal.timeout(20000))
+  if (error) throw failure(error)
+  return data
+}
+
+function sameLetter(letter, input) {
+  return letter.sender_id === input.userId && letter.pair_id === input.pairId && letter.content === input.content && letter.stationery === input.stationery && JSON.stringify(letter.images) === JSON.stringify(input.images)
+}
+
+export async function insertLetter({ id, pairId, userId, content, stationery = 'cream', images = [], deliver = true }) {
+  const input = { id, pairId, userId, content, stationery, images }
+  const existing = await findLetter(id)
+  if (existing) {
+    if (!sameLetter(existing, input)) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
+    return existing
+  }
   const now = new Date().toISOString()
-  const base = {
-    pair_id: pairId,
-    sender_id: userId,
-    content: content.trim(),
-    stationery,
-    status: deliver ? 'delivered' : 'sealed',
-    delivered_at: deliver ? now : null,
-  }
-  let { error } = await supabase.from('letters').insert({ ...base, images })
-  if (error && /images/i.test(error.message)) {
-    ({ error } = await supabase.from('letters').insert(base))
-  }
-  return error
+  const { data, error, status } = await supabase.from('letters').insert({ id, pair_id: pairId, sender_id: userId, content, stationery, images, status: deliver ? 'delivered' : 'sealed', delivered_at: deliver ? now : null }).select().single().abortSignal(AbortSignal.timeout(20000))
+  if (!error) return data
+  const confirmed = await findLetter(id)
+  if (confirmed && sameLetter(confirmed, input)) return confirmed
+  if (confirmed) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
+  throw failure(error, status >= 400 && status < 500 && status !== 408 && error.code !== '57014')
 }
 
-// 把一封封存的信真正寄出：标记送达 + 鸽子叼着它飞去对方窗台
-export async function deliverLetter(letter, pigeon, side, pair) {
-  await supabase.from('letters')
-    .update({ status: 'delivered', delivered_at: new Date().toISOString() })
-    .eq('id', letter.id)
-  await arrivePigeon(pigeon, otherSide(side), pair)
-}
-
-// 读信：标记已读，并让守着这封信的鸽子在原地重新推导状态
-// （这侧还有别的未读信就接着守，否则恢复空闲、可以自由溜达 —— 规则 3.4）
-export async function markRead(letter, pigeon, pair) {
-  await supabase.from('letters')
-    .update({ status: 'read', read_at: new Date().toISOString() })
-    .eq('id', letter.id)
-  if (pigeon && pigeon.state === 'guarding') {
-    await arrivePigeon(pigeon, pigeon.location, pair)
+export async function sendLetter({ id, pairId, userId, content, attachments }) {
+  try { validateAttachments(attachments) } catch (error) { throw failure(error, true) }
+  const objects = await Promise.all(attachments.map(async (attachment) => {
+    const hash = await fileHash(attachment.file)
+    return { file: attachment.file, hash, path: `${userId}/${id}/${attachment.id}-${hash}.${IMAGE_EXTENSIONS[attachment.file.type]}` }
+  }))
+  const images = objects.map((item) => item.path)
+  const existing = await findLetter(id)
+  if (existing) {
+    if (!sameLetter(existing, { pairId, userId, content, stationery: 'cream', images })) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
+    return existing
   }
+  if (objects.length) {
+    const { data: privateReady, error: readinessError } = await supabase.rpc('private_letter_images_ready')
+    if (readinessError || privateReady !== true) throw failure(new Error('私有照片存储尚未就绪，请先完成安全迁移'), true)
+  }
+  for (const item of objects) {
+    const { error } = await bucket.upload(item.path, item.file, { contentType: item.file.type, cacheControl: '3600', upsert: false })
+    if (!error) continue
+    const conflict = error.status === 409 || ['409', 'ResourceAlreadyExists', 'KeyAlreadyExists', 'already_exists'].includes(String(error.statusCode))
+    const legacyConflict = error.status === 400 && /^(?:The resource already exists|Asset Already Exists)$/i.test(error.message)
+    if (conflict || legacyConflict) {
+      const { data, error: readError } = await bucket.download(item.path)
+      if (!readError && await fileHash(data) === item.hash) continue
+    }
+    throw failure(error, true)
+  }
+  return insertLetter({ id, pairId, userId, content, images, deliver: true })
 }
 
-// 提交回应（规则 5：只有收信人、一封信一次、提交后不可修改）
-// 数据库层面也上了锁：letter_id 唯一 + 没有 update 策略。
+export async function resolveLetterImages(images) {
+  const urls = []
+  try {
+    for (const image of images) {
+      const path = imagePath(image, supabase.supabaseUrl)
+      const { data, error } = await bucket.download(path)
+      if (error) throw failure(error)
+      urls.push(URL.createObjectURL(data))
+    }
+    return urls
+  } catch (error) { urls.forEach(URL.revokeObjectURL); throw error }
+}
+
+export async function deliverLetter(letter) {
+  const { error } = await supabase.rpc('deliver_sealed_letter', { letter_id: letter.id })
+  if (error) throw failure(error)
+}
+
+export async function markRead(letter) {
+  const { error } = await supabase.rpc('mark_letter_read', { letter_id: letter.id })
+  if (error) throw failure(error)
+}
+
 export async function submitReaction({ letterId, pairId, userId, emoji, note }) {
-  const { error } = await supabase.from('reactions').insert({
-    letter_id: letterId,
-    pair_id: pairId,
-    user_id: userId,
-    emoji: emoji || null,
-    note: note?.trim() ? note.trim() : null,
-  })
-  return error
-}
-
-// 上传一张信里的图片，返回可直接放进 <img> 的公开网址
-// 路径规则：自己的 id / 随机文件名 —— 存储策略只允许你写自己那层文件夹
-export async function uploadLetterImage(file, userId) {
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
-  const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
-  const { error } = await supabase.storage
-    .from('letter-images')
-    .upload(path, file, { cacheControl: '31536000', upsert: false })
-  if (error) return { error }
-  const { data } = supabase.storage.from('letter-images').getPublicUrl(path)
-  return { url: data.publicUrl }
+  const { error } = await supabase.from('reactions').insert({ letter_id: letterId, pair_id: pairId, user_id: userId, emoji: emoji || null, note: note?.trim() || null })
+  if (error) throw failure(error)
 }

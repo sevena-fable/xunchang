@@ -5,7 +5,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useAnimation } from 'framer-motion'
 import { PIGEON_PERCH } from '../lib/scene'
-import { TinyLetter } from './Glyphs'
 import { sfxWings, sfxCoo } from '../lib/sfx'
 
 // 点击鸽子的随机小动作：动作 + 它可能说的话
@@ -90,17 +89,7 @@ function PigeonSprite({ pigeon, atMyWindow, myCall }) {
             )}
           </AnimatePresence>
 
-          {/* 守信时，身边浮着一个小信封，暗示“它守着信”（规则 3.4） */}
-          {pigeon.state === 'guarding' && (
-            <motion.span
-              className="absolute right-[-9%] top-0 w-[32%]"
-              style={{ filter: 'drop-shadow(0 3px 5px rgba(60,40,20,0.4))' }}
-              animate={{ y: [0, -4, 0], rotate: [-4, 2, -4] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <TinyLetter />
-            </motion.span>
-          )}
+          {/* 守信时不另外挂小信封了：支架上的信封立绘就是"有信"的提示，不用重复说两遍 */}
 
           <motion.img
             src="/pigeon.png"

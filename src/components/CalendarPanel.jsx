@@ -1,16 +1,17 @@
 // 台历 —— 有通信的日子会自动落下一枚小信封（规则 7）
 // 纯自动沉淀：你什么都不用记，写过信的日子自己会留在这本台历上。
 import { useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { dayKey } from '../hooks/useLetters'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { dayKey } from '../lib/letterFormat'
 import { getStationery } from '../lib/stationery'
 import Panel from './Panel'
 import { sfxTap, sfxPaper } from '../lib/sfx'
 
 const WEEK = ['日', '一', '二', '三', '四', '五', '六']
 
-function CalendarPanel({ open, onClose, history, userId, onRead }) {
+function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], userId, onRead }) {
   const today = new Date()
+  const reducedMotion = useReducedMotion()
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() })
   const [picked, setPicked] = useState(null)
 
@@ -50,34 +51,42 @@ function CalendarPanel({ open, onClose, history, userId, onRead }) {
       open={open}
       onClose={() => { setPicked(null); onClose() }}
       title="台 历"
-      subtitle={monthCount ? `这个月有 ${monthCount} 天，你们说过话` : '这个月还很安静'}
+      subtitle={monthCount ? '分享过的日常，都在这里' : '这个月还很安静'}
       width="max-w-md"
     >
+      {[[unread, '还没看过'], [mySealed, '还未分享']].map(([items, label]) => items.length > 0 && (
+        <details key={label} open className="mb-4" aria-label={label}>
+          <summary className="mb-2 cursor-pointer text-sm">{label} · {items.length}</summary>
+          <div className="thin-scroll max-h-32 space-y-2 overflow-y-auto">
+            {items.map((letter) => <button key={letter.id} onClick={() => onRead(letter)} className="flex w-full gap-3 rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2 text-left text-sm"><span className="shrink-0 text-xs">{dayKey(letter.sealed_at)}</span><span className="truncate">{letter.content.trim() || '（照片）'}</span></button>)}
+          </div>
+        </details>
+      ))}
       {/* 台历上方的铁圈 */}
       <div className="mb-3 flex justify-center gap-3">
         {Array.from({ length: 7 }).map((_, i) => (
           <span
             key={i}
             className="h-2.5 w-2.5 rounded-full"
-            style={{ background: 'linear-gradient(180deg,#cfc6b4,#8e836f)', boxShadow: 'inset 0 -1px 1px rgba(255,255,255,0.6)' }}
+            style={{ background: 'linear-gradient(180deg,#d6dce6,#857c91)', boxShadow: 'inset 0 -1px 1px rgba(255,255,255,0.6)' }}
           />
         ))}
       </div>
 
       {/* 月份切换 */}
       <div className="mb-4 flex items-center justify-between px-1">
-        <button onClick={() => move(-1)} className="px-2 text-lg text-[#a8916b] transition-colors hover:text-[#6b563b]" aria-label="上个月">‹</button>
+        <button onClick={() => move(-1)} className="px-2 text-lg text-[#857c91] transition-colors hover:text-[#4a4358]" aria-label="上个月">‹</button>
         <div className="text-center">
-          <p className="text-2xl tracking-[0.1em] text-[#6b563b]">
+          <p className="text-2xl tracking-[0.1em] text-[#4a4358]">
             {String(cursor.m + 1).padStart(2, '0')}
-            <span className="ml-2 text-xs tracking-[0.28em] text-[#a8916b]">{cursor.y}</span>
+            <span className="ml-2 text-xs tracking-[0.28em] text-[#857c91]">{cursor.y}</span>
           </p>
         </div>
-        <button onClick={() => move(1)} className="px-2 text-lg text-[#a8916b] transition-colors hover:text-[#6b563b]" aria-label="下个月">›</button>
+        <button onClick={() => move(1)} className="px-2 text-lg text-[#857c91] transition-colors hover:text-[#4a4358]" aria-label="下个月">›</button>
       </div>
 
       {/* 星期表头 */}
-      <div className="grid grid-cols-7 gap-1 text-center text-[10px] tracking-widest text-[#b3a181]">
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] tracking-widest text-[#9c95a8]">
         {WEEK.map((w) => <span key={w} className="py-1">{w}</span>)}
       </div>
 
@@ -93,22 +102,23 @@ function CalendarPanel({ open, onClose, history, userId, onRead }) {
           return (
             <button
               key={key}
+              aria-label={`${key}${items ? `，${items.length} 条内容` : ''}${items?.some((letter) => unread.some((item) => item.id === letter.id)) ? '，有未读' : ''}`}
               onClick={() => { sfxTap(); setPicked(isPicked ? null : (items ? key : null)) }}
               className="relative flex h-10 flex-col items-center justify-center rounded-lg text-sm transition-colors"
               style={{
-                color: items ? '#5b4a34' : '#b9a888',
-                background: isPicked ? 'rgba(196,164,120,0.35)' : items ? 'rgba(255,255,255,0.45)' : 'transparent',
-                border: isToday ? '1px solid rgba(138,107,61,0.55)' : '1px solid transparent',
+                color: items ? '#4a4358' : '#b0aab9',
+                background: isPicked ? 'rgba(216,180,182,0.5)' : items ? 'rgba(237,240,244,0.9)' : 'transparent',
+                border: isToday ? '1px solid rgba(133,124,145,0.6)' : '1px solid transparent',
                 cursor: items ? 'pointer' : 'default',
               }}
             >
               {d}
               {items && (
                 <motion.span
-                  initial={{ scale: 0 }}
+                  initial={reducedMotion ? false : { scale: 0 }}
                   animate={{ scale: 1 }}
                   className="absolute bottom-1 h-[3.5px] w-[3.5px] rounded-full"
-                  style={{ background: '#b9452f', boxShadow: '0 0 0 1px rgba(255,248,236,0.7)' }}
+                  style={{ background: '#c48c92', boxShadow: '0 0 0 1px rgba(247,242,238,0.9)' }}
                 />
               )}
             </button>
@@ -121,13 +131,14 @@ function CalendarPanel({ open, onClose, history, userId, onRead }) {
         {picked && (
           <motion.div
             key={picked}
-            initial={{ opacity: 0, height: 0 }}
+            initial={reducedMotion ? false : { opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
+            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={reducedMotion ? { duration: 0 } : undefined}
             className="overflow-hidden"
           >
-            <p className="mb-2 mt-5 text-[11px] tracking-[0.28em] text-[#a8916b]">
-              {picked.slice(5).replace('-', ' 月 ')} 日 · {pickedLetters.length} 封
+            <p className="mb-2 mt-5 text-[11px] tracking-[0.28em] text-[#857c91]">
+              {picked.slice(5).replace('-', ' 月 ')} 日 · {pickedLetters.length} 条
             </p>
             <div className="thin-scroll flex max-h-40 flex-col gap-2 overflow-y-auto pr-1">
               {pickedLetters.map((l) => {
@@ -141,7 +152,7 @@ function CalendarPanel({ open, onClose, history, userId, onRead }) {
                     className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-transform hover:translate-x-0.5"
                     style={{ background: style.paper, border: `1px solid ${style.border}`, color: style.ink }}
                   >
-                    <span className="text-xs opacity-50">{l.sender_id === userId ? '你寄的' : '收到的'}</span>
+                    <span className="text-xs opacity-50">{l.sender_id === userId ? '你分享的' : '对方分享的'}</span>
                     <span className="flex-1 truncate">{preview}</span>
                   </button>
                 )
@@ -152,8 +163,8 @@ function CalendarPanel({ open, onClose, history, userId, onRead }) {
       </AnimatePresence>
 
       {!picked && (
-        <p className="mt-5 text-center text-[11px] tracking-widest text-[#b3a181]">
-          标了红点的日子，那天有信，点一下能翻回去看
+        <p className="mt-5 text-center text-[11px] tracking-widest text-[#9c95a8]">
+          点开标了红点的日子，看看分享过什么
         </p>
       )}
     </Panel>

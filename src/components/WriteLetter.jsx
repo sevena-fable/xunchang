@@ -1,230 +1,245 @@
-// 写信面板 —— 写字、选信纸、夹一两张照片，然后封存或让鸽子送去
-// 仪式感：点"让鸽子送去"后不会立刻关掉，会先盖一枚火漆印、听见翅膀声，再退场（阶段五）
-import { useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
-import { STATIONERY } from '../lib/stationery'
-import { mySide } from '../lib/pigeon'
-import { insertLetter, uploadLetterImage } from '../lib/letters'
-import Panel, { PrimaryButton, GhostButton } from './Panel'
-import { Feather } from './Glyphs'
-import { sfxPaper, sfxSeal, sfxWings, sfxTap } from '../lib/sfx'
+import { useEffect, useRef, useState } from 'react'
+import { getStationery } from '../lib/stationery'
+import { acquireDraft, clearDraft, draftKey, emptyDraft, loadDraft, saveDraft } from '../lib/drafts'
+import Modal from './Modal'
+import Panel, { PrimaryButton } from './Panel'
+import PaperSheet, { PaperWorkspace, usePaperViewport } from './PaperSheet'
+import { selectPaperText } from '../lib/paper'
+import { sfxPaper, sfxSeal } from '../lib/sfx'
 
-const MAX_IMAGES = 3
+const STYLE = getStationery('cream')
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 
-function WriteLetter({ open, onClose, pair, userId, pigeon, onDone }) {
-  const [content, setContent] = useState('')
-  const [stationery, setStationery] = useState('cream')
-  const [images, setImages] = useState([])       // 已上传好的图片网址
-  const [uploading, setUploading] = useState(false)
+export default function WriteLetter({ open, onClose, pair, userId, onDone, onSend, environment = 'live' }) {
+  const key = draftKey(environment, userId, pair.id)
+  const fitsViewport = usePaperViewport()
+  const [draft, setDraft] = useState(emptyDraft)
+  const [ready, setReady] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
-  const [ceremony, setCeremony] = useState(false) // 正在播"封蜡 + 飞走"
+  const [saved, setSaved] = useState('')
+  const [draftError, setDraftError] = useState('')
+  const [thumbnails, setThumbnails] = useState([])
+  const [previewId, setPreviewId] = useState(null)
+  const [showSource, setShowSource] = useState(false)
   const fileRef = useRef(null)
+  const inputRef = useRef(null)
+  const sending = useRef(false)
+  const version = useRef(0)
+  const alive = useRef(false)
+  const editor = useRef(null)
+  const dirty = useRef(false)
+  const closing = useRef(false)
+  const acquisition = useRef(0)
+  const [access, setAccess] = useState('checking')
+  const [accessMessage, setAccessMessage] = useState('')
+  const [retry, setRetry] = useState(0)
+  const [closingPaper, setClosingPaper] = useState(false)
 
-  const style = STATIONERY[stationery]
-  // 规则 4.1：鸽子必须在你的窗台，才能叼着信飞走
-  const side = mySide(pair, userId)
-  const canSend = pigeon && pigeon.location === side
-
-  function reset() {
-    setContent(''); setImages([]); setMessage(''); setCeremony(false); setBusy(false)
-  }
-
-  async function pickImages(e) {
-    const files = Array.from(e.target.files || [])
-    e.target.value = '' // 允许重复选同一张
-    if (!files.length) return
-    const room = MAX_IMAGES - images.length
-    if (room <= 0) { setMessage(`一封信里最多夹 ${MAX_IMAGES} 张照片`); return }
-
-    setUploading(true); setMessage('')
-    const urls = []
-    for (const f of files.slice(0, room)) {
-      if (f.size > 6 * 1024 * 1024) { setMessage('单张照片请小于 6MB'); continue }
-      const { url, error } = await uploadLetterImage(f, userId)
-      if (error) { setMessage('照片没夹进去：' + error.message); break }
-      urls.push(url)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+      editor.current?.release()
+      editor.current = null
     }
-    setImages((cur) => [...cur, ...urls])
-    setUploading(false)
-    if (urls.length) sfxPaper()
-  }
+  }, [key])
 
-  async function seal() {
-    if (!content.trim() && images.length === 0) { setMessage('先写点什么吧'); return }
-    setBusy(true); setMessage('')
-    const error = await insertLetter({
-      pairId: pair.id, userId, content, stationery, images, deliver: false,
+  useEffect(() => {
+    if (!open || editor.current) return
+    let active = true
+    const attempt = ++acquisition.current
+    const current = () => active && attempt === acquisition.current
+    setDraft(emptyDraft())
+    setReady(false)
+    setAccess('checking')
+    setAccessMessage('正在确认草稿编辑权限…')
+    setMessage('')
+    setDraftError('')
+    setSaved('')
+    async function acquire() {
+      let session
+      try {
+        session = await acquireDraft(key)
+        if (!current()) { session?.release(); return }
+        const value = await (session ? session.run(() => loadDraft(key)) : loadDraft(key))
+        if (!current()) { session?.release(); return }
+        editor.current = session
+        dirty.current = false
+        setDraft(value)
+        setAccess(session ? 'editing' : 'blocked')
+        setAccessMessage(session ? '' : '草稿正在另一个窗口编辑或尚未保存，此处只读。')
+        if (session) setSaved(value.attempted ? '上次分享尚待确认，可重试确认' : '草稿保存在这台电脑')
+      } catch (error) {
+        session?.release()
+        if (current()) {
+          setAccess('unavailable')
+          setAccessMessage('暂不能编辑草稿：' + error.message)
+        }
+      } finally { if (current()) setReady(true) }
+    }
+    acquire()
+    return () => { active = false }
+  }, [key, open, retry])
+
+  useEffect(() => {
+    const urls = draft.attachments.map((item) => ({ id: item.id, url: URL.createObjectURL(item.file) }))
+    setThumbnails(urls)
+    return () => urls.forEach((item) => URL.revokeObjectURL(item.url))
+  }, [draft.attachments])
+
+  function persist(next) {
+    const session = editor.current
+    if (!session) return Promise.reject(new Error('请先取得草稿编辑权限'))
+    setDraft(next)
+    dirty.current = true
+    const revision = ++version.current
+    setSaved('正在保存…')
+    return session.run(() => saveDraft(key, next)).then(() => {
+      if (alive.current && editor.current === session && revision === version.current) {
+        dirty.current = false
+        setSaved('草稿已保存在这台电脑')
+        setDraftError('')
+      }
+    }).catch(() => {
+      if (alive.current && editor.current === session && revision === version.current) { setSaved(''); setDraftError('草稿未保存，请勿刷新或关闭页面') }
+      throw new Error('草稿保存失败')
     })
-    setBusy(false)
-    if (error) { setMessage('封存失败：' + error.message); return }
-    sfxSeal()
-    onDone()
-    reset()
   }
 
-  async function send() {
-    if (!content.trim() && images.length === 0) { setMessage('先写点什么吧'); return }
-    if (!canSend) {
-      setMessage(`${pigeon?.name || '鸽子'} 此刻在对方窗台。先摇铃把它唤回来，它才能替你送信。`)
+  function edit(next) {
+    if (locked || closing.current || !editor.current) return
+    setMessage('')
+    persist(next).catch(() => {})
+  }
+
+  function pickImages(event) {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (locked || closing.current || !files.length) return
+    if (files.length + draft.attachments.length > 3) { setMessage('一次最多分享三张照片'); return }
+    if (files.some((file) => !IMAGE_TYPES.includes(file.type) || file.size > 6 * 1024 * 1024)) {
+      setMessage('请选择 JPG、PNG、WebP 或 GIF，每张不超过 6MB')
       return
     }
-    setBusy(true); setMessage('')
-    const error = await insertLetter({
-      pairId: pair.id, userId, content, stationery, images, deliver: true,
-    })
-    if (error) { setBusy(false); setMessage('寄出失败：' + error.message); return }
-
-    // 仪式：盖章 → 翅膀声 → 由 onDone 让鸽子叼着信飞去对方窗台
-    setCeremony(true)
-    sfxSeal()
-    setTimeout(() => sfxWings(), 900)
-    setTimeout(() => { onDone(); reset() }, 2100)
+    edit({ ...draft, attachments: [...draft.attachments, ...files.map((file) => ({ id: crypto.randomUUID(), file }))] })
+    setMessage('')
+    sfxPaper()
   }
 
+  const empty = !draft.content.trim() && !draft.attachments.length
+
+  async function send() {
+    const session = editor.current
+    if (!session || access !== 'editing' || sending.current || closing.current || !ready || empty) return
+    sending.current = true
+    setBusy(true)
+    setMessage('')
+    const snapshot = { ...draft, attempted: true }
+    try {
+      await persist(snapshot)
+      const cleanupFailed = await session.run(async () => {
+        await onSend({ ...snapshot, pairId: pair.id, userId })
+        try { await clearDraft(key); return false } catch { return true }
+      })
+      if (!alive.current || editor.current !== session) return
+      ++version.current
+      dirty.current = cleanupFailed
+      setDraft(emptyDraft())
+      setSaved('')
+      setMessage(cleanupFailed ? '已分享，但本机旧草稿清理失败；重复确认不会再次分享' : '对方可以看到了')
+      setBusy(false)
+      sending.current = false
+      sfxSeal()
+      onDone()
+    } catch (error) {
+      if (!alive.current || editor.current !== session) return
+      setMessage('尚未确认分享成功：' + error.message)
+      if (error.confirmedNotSent || error.message === '草稿保存失败') persist({ ...snapshot, attempted: false }).catch(() => {})
+      setBusy(false)
+      sending.current = false
+    }
+  }
+
+  const locked = !ready || access !== 'editing' || busy || closingPaper || draft.attempted
+  const previewPhoto = thumbnails.find((item) => item.id === previewId)
+  function insertSource(source) {
+    if (locked) return
+    const separator = !draft.content || draft.content.endsWith('\n\n') ? '' : draft.content.endsWith('\n') ? '\n' : '\n\n'
+    const content = `${draft.content}${separator}出处：${source}`
+    edit({ ...draft, content })
+    setShowSource(false)
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return
+      inputRef.current.focus({ preventScroll: true })
+      selectPaperText(inputRef.current, content.length)
+    })
+  }
+  const close = async () => {
+    if (sending.current || closing.current) return
+    closing.current = true
+    ++acquisition.current
+    setClosingPaper(true)
+    const session = editor.current
+    await session?.flush()
+    if (!alive.current) return
+    if (editor.current === session && !dirty.current) {
+      editor.current = null
+      session?.release()
+    }
+    setPreviewId(null)
+    setShowSource(false)
+    onClose()
+    closing.current = false
+    setClosingPaper(false)
+  }
   return (
-    <Panel
-      open={open}
-      onClose={() => { if (!ceremony) { reset(); onClose() } }}
-      title={ceremony ? '' : '写 一 封 信'}
-      subtitle={ceremony ? '' : '慢慢写，它不着急'}
-      width="max-w-2xl"
-      tone={stationery === 'night' ? 'night' : 'paper'}
-    >
-      <AnimatePresence mode="wait">
-        {ceremony ? (
-          // ——— 送出的那一刻 ———
-          <motion.div
-            key="ceremony"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex h-64 flex-col items-center justify-center text-center"
-          >
-            <motion.div
-              initial={{ scale: 2.4, opacity: 0, rotate: -18 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0 }}
-              transition={{ duration: 0.5, ease: [0.3, 1.4, 0.4, 1] }}
-              className="flex h-20 w-20 items-center justify-center rounded-full"
-              style={{
-                background: 'radial-gradient(circle at 36% 32%, #c85c4a, #8e2f22 72%, #6d2118)',
-                boxShadow: '0 6px 18px rgba(110,30,20,0.45), inset 0 2px 6px rgba(255,255,255,0.25)',
-              }}
-            >
-              <Feather size={34} stroke={1.3} />
-            </motion.div>
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.75 }}
-              className="mt-6 text-sm tracking-[0.25em] text-[#7a6142]"
-            >
-              信封好了
-            </motion.p>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.25 }}
-              className="mt-2 text-xs tracking-[0.2em] text-[#9c8663]"
-            >
-              {pigeon?.name} 叼着它，从你的窗口飞了出去
-            </motion.p>
-          </motion.div>
-        ) : (
-          <motion.div key="editor" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            {/* 信纸本体：淡淡的横线，像真的信纸 */}
-            <div
-              className="rounded-xl p-1"
-              style={{ background: style.paper, border: `1px solid ${style.border}`, boxShadow: 'inset 0 1px 8px rgba(0,0,0,0.06)' }}
-            >
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="把想说的话，慢慢写在这里…"
-                rows={9}
-                maxLength={2000}
-                className="w-full resize-none bg-transparent px-4 py-2 text-[15px] outline-none placeholder:opacity-40"
-                style={{
-                  color: style.ink,
-                  lineHeight: '32px',
-                  backgroundImage: `repeating-linear-gradient(transparent, transparent 31px, ${style.border} 32px)`,
-                }}
-              />
-
-              {/* 夹进信里的照片 */}
-              {images.length > 0 && (
-                <div className="flex flex-wrap gap-2 px-4 pb-3">
-                  {images.map((url) => (
-                    <div key={url} className="group relative">
-                      <img
-                        src={url}
-                        alt="夹在信里的照片"
-                        className="h-20 w-20 rounded-lg object-cover shadow-sm"
-                        style={{ border: `1px solid ${style.border}` }}
-                      />
-                      <button
-                        onClick={() => { sfxTap(); setImages((c) => c.filter((u) => u !== url)) }}
-                        className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-stone-800/80 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label="拿掉这张"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* 信纸挑选 + 夹照片 */}
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-xs text-[#8a7558]">信纸</span>
-              {Object.entries(STATIONERY).map(([key, s]) => (
-                <button
-                  key={key}
-                  onClick={() => { sfxPaper(); setStationery(key) }}
-                  title={s.label}
-                  className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-105 ${stationery === key ? 'scale-110' : 'opacity-70'}`}
-                  style={{ backgroundColor: s.paper, borderColor: stationery === key ? '#8a6b3d' : s.border }}
-                  aria-label={s.label}
-                />
-              ))}
-
-              <span className="mx-2 h-4 w-px bg-[#d6c4a2]" />
-
-              <button
-                onClick={() => { sfxTap(); fileRef.current?.click() }}
-                disabled={uploading || images.length >= MAX_IMAGES}
-                className="rounded-full border border-[#c3ac82]/70 px-3 py-1 text-xs text-[#6b563b] transition-colors hover:bg-[#e8dcc0]/50 disabled:opacity-40"
-              >
-                {uploading ? '正在夹进去…' : `📎 夹张照片 ${images.length}/${MAX_IMAGES}`}
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={pickImages}
-                className="hidden"
-              />
-            </div>
-
-            {message && <p className="mt-3 text-sm text-rose-600/90">{message}</p>}
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <GhostButton onClick={seal} disabled={busy || uploading}>先 封 存</GhostButton>
-              <PrimaryButton onClick={send} disabled={busy || uploading || !canSend}>
-                {busy ? '请稍候…' : '让鸽子送去'}
-              </PrimaryButton>
-            </div>
-            <p className="mt-3 text-right text-[11px] text-[#9c8663]">
-              {canSend
-                ? '封存的信会放在你桌上，之后随时可以寄出'
-                : `${pigeon?.name || '鸽子'} 此刻不在你窗台，先摇铃唤它回来才能寄出；也可以先封存`}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Panel>
+    <Modal open={open} onClose={close} label="给你看看" closeOnBackdrop={false}>
+      <PaperWorkspace fitsViewport={fitsViewport} onClose={close} disabled={busy || closingPaper}>
+        <PaperSheet inputRef={inputRef} style={STYLE} content={draft.content} onChange={(content) => edit({ ...draft, content })} header="给你看看" onClose={close} disabled={busy || closingPaper} readOnly={!ready || access !== 'editing' || draft.attempted} />
+        <div className="letter-tools">
+          <div className="attachment-tray">
+            <button type="button" onClick={() => fileRef.current?.click()} disabled={locked || draft.attachments.length >= 3}>加照片</button>
+            <input ref={fileRef} type="file" aria-label="选择照片" accept={IMAGE_TYPES.join(',')} multiple hidden onChange={pickImages} />
+            {thumbnails.map((item, index) => (
+              <div key={item.id} className="attachment-item">
+                <button type="button" className="preview-photo" aria-label={`预览照片 ${index + 1}`} disabled={busy} onClick={() => setPreviewId(item.id)}><img src={item.url} alt={`附件 ${index + 1}`} /></button>
+                <button type="button" className="remove-photo" aria-label={`移除附件 ${index + 1}`} disabled={locked} onClick={() => edit({ ...draft, attachments: draft.attachments.filter((photo) => photo.id !== item.id) })}>×</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setShowSource(true)} disabled={locked}>加出处</button>
+          </div>
+          <button type="button" className="send-button" onClick={send} disabled={busy || closingPaper || !ready || access !== 'editing' || empty}>{busy ? '正在分享…' : draft.attempted ? '确认上次分享' : '分享给对方'}</button>
+        </div>
+        <div className="letter-status">
+          {draftError && <p role="alert">{draftError}</p>}
+          <p role="status">{accessMessage || message || (!draftError && saved)}{(access === 'blocked' || access === 'unavailable') && <button type="button" className="ml-3 underline" disabled={closingPaper} onClick={() => setRetry((value) => value + 1)}>重试编辑</button>}</p>
+        </div>
+      </PaperWorkspace>
+      {previewPhoto && <Modal onClose={() => setPreviewId(null)} label="预览照片"><div className="flex h-full w-full flex-col items-center gap-4"><img src={previewPhoto.url} alt="分享前的完整照片" className="min-h-0 max-w-full flex-1 object-contain" /><button type="button" className="text-[#f7f2ee]" onClick={() => setPreviewId(null)}>关闭照片</button></div></Modal>}
+      {showSource && <SourcePanel onClose={() => setShowSource(false)} onInsert={insertSource} />}
+    </Modal>
   )
 }
 
-export default WriteLetter
+function SourcePanel({ onClose, onInsert }) {
+  const [title, setTitle] = useState('')
+  const [location, setLocation] = useState('')
+  const source = [title.trim(), location.trim()].filter(Boolean).join(' · ')
+  return (
+    <Panel open title="加出处" subtitle="选填，附在正文末尾，可直接修改或删除。" onClose={onClose}>
+      <div className="space-y-4 text-sm">
+        <label className="block">作品与作者
+          <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2" />
+        </label>
+        <label className="block">链接或页码
+          <input value={location} onChange={(event) => setLocation(event.target.value)} className="mt-2 w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2" />
+        </label>
+        <div className="flex items-center justify-end gap-4">
+          <button type="button" onClick={onClose}>取消</button>
+          <PrimaryButton type="button" disabled={!source} onClick={() => onInsert(source)}>插入正文</PrimaryButton>
+        </div>
+      </div>
+    </Panel>
+  )
+}

@@ -17,3 +17,7 @@ dist
 
 # 调画面时随手截的图（只是工作底稿，不用提交）
 .preview-shots
+
+# 素材原稿与剪贴板底稿（几十 MB，网站运行用不到）
+art-src
+vibe_images
