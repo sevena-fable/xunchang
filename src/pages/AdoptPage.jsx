@@ -40,7 +40,7 @@ function AdoptPage({ pair, onChanged }) {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl bg-white/70 backdrop-blur-md p-8 shadow-lg text-center">
+    <div className="entry-card panel-card max-w-sm text-center">
       <img
         src="/pigeon.png"
         alt="一只信鸽"
@@ -48,8 +48,8 @@ function AdoptPage({ pair, onChanged }) {
         className="pigeon-bob mx-auto mb-4 h-24 w-auto"
         style={{ filter: 'drop-shadow(0 8px 12px rgba(60,80,110,0.25))' }}
       />
-      <h2 className="text-2xl text-sky-900 mb-2 tracking-widest">一只信鸽落在了窗台</h2>
-      <p className="text-sm text-sky-700 mb-6">
+      <h2 className="panel-title mb-2">一只信鸽落在了窗台</h2>
+      <p className="entry-muted mb-6">
         它将往返于你们的两扇窗之间<br />先给它取个名字吧（谁先想好谁来填）
       </p>
 
@@ -59,19 +59,19 @@ function AdoptPage({ pair, onChanged }) {
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={10}
-        className="w-full rounded-lg border border-sky-200 bg-white/80 px-4 py-2.5 text-center text-sky-900 placeholder-sky-400 outline-none focus:border-sky-400"
+        className="panel-input text-center"
       />
 
       <button
         onClick={adopt}
         disabled={busy}
-        className="mt-4 w-full rounded-lg bg-sky-600 py-2.5 text-white tracking-widest hover:bg-sky-700 disabled:opacity-50 transition-colors"
+        className="panel-primary mt-4 w-full"
       >
         {busy ? '请稍候…' : '就叫这个名字'}
       </button>
 
       {message && (
-        <p className="mt-4 text-sm text-rose-500">{message}</p>
+        <p role="status" className="entry-message">{message}</p>
       )}
     </div>
   )

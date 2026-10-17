@@ -77,11 +77,11 @@ function SummonListener({ pair, userId, pigeon, partnerNickname, onChanged }) {
         >
           <BrassBell size={52} />
         </motion.div>
-        <p className="mb-6 text-sm leading-7 text-[#6b563b]">
+        <p className="mb-6 text-sm leading-7 text-[var(--panel-muted)]">
           铃声是从对面那扇窗传来的。<br />
           要放 {pigeon.name} 飞过去吗？
         </p>
-        <div className="flex gap-3">
+        <div className="panel-actions justify-center">
           <GhostButton onClick={() => respond(false)} disabled={busy}>再留一会儿</GhostButton>
           <PrimaryButton onClick={() => respond(true)} disabled={busy}>让它飞过去</PrimaryButton>
         </div>

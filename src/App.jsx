@@ -111,15 +111,15 @@ export default function App() {
 
   const visibleError = authError || error
   if (!recovery && session && data?.userId === userId && data.pair?.status === 'paired') {
-    return <><HomePage key={`${userId}:${data.pair.id}`} {...data} onChanged={load} />{visibleError && <p role="alert" className="fixed bottom-4 left-4 z-30 rounded-lg bg-[#857c91]/95 p-3 text-xs text-[#f7f2ee]">{visibleError}<button onClick={retry} className="ml-3 underline">重试</button></p>}</>
+    return <><HomePage key={`${userId}:${data.pair.id}`} {...data} onChanged={load} />{visibleError && <p role="alert" className="panel-toast fixed bottom-4 left-4 z-30 p-3">{visibleError}<button onClick={retry} className="ml-3 underline">重试</button></p>}</>
   }
   let screen
   if (recovery && authReady) screen = <AuthPage recovery canReset={!!session} onRecoveryDone={finishRecovery} />
-  else if (visibleError) screen = <div role="alert" className="entry-card"><p className="entry-message">{visibleError}</p><div className="entry-links"><button onClick={retry}>重试</button>{session && <button onClick={logout}>退出登录</button>}</div></div>
-  else if (!authReady || loading) screen = <p role="status" className="entry-card text-center text-sm">正在加载…</p>
+  else if (visibleError) screen = <div role="alert" className="entry-card panel-card"><p className="entry-message">{visibleError}</p><div className="entry-links"><button onClick={retry}>重试</button>{session && <button onClick={logout}>退出登录</button>}</div></div>
+  else if (!authReady || loading) screen = <p role="status" className="entry-card panel-card text-center text-sm">正在加载…</p>
   else if (!session) screen = <AuthPage />
   else if (data?.profile) screen = <PairPage userId={userId} pair={data.pair} onChanged={load} />
-  else screen = <button className="entry-primary w-full" onClick={retry}>重新读取资料</button>
+  else screen = <button className="panel-primary w-full" onClick={retry}>重新读取资料</button>
 
   return (
     <main className="entry-page" style={{ backgroundImage: `linear-gradient(#4a435826, #4a435826), url(${BG_MAIN})` }}>

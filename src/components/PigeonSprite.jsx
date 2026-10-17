@@ -82,7 +82,7 @@ function PigeonSprite({ pigeon, atMyWindow, myCall }) {
                 initial={{ opacity: 0, y: 8, scale: 0.94 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -6 }}
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap rounded-full bg-white/85 px-3.5 py-1.5 text-xs text-stone-700 shadow-lg backdrop-blur-sm"
+                className="panel-toast absolute bottom-full left-1/2 -translate-x-1/2 mb-2 whitespace-nowrap px-3.5 py-1.5"
               >
                 {bubble}
               </motion.div>

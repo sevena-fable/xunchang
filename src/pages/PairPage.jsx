@@ -72,8 +72,8 @@ function PairPage({ userId, pair, onChanged }) {
 
   if (pair?.status === 'waiting') {
     return (
-      <section className="entry-card text-center" aria-labelledby="pair-heading">
-        <h2 id="pair-heading" className="entry-heading">等待配对</h2>
+      <section className="entry-card panel-card text-center" aria-labelledby="pair-heading">
+        <h2 id="pair-heading" className="entry-heading panel-title">等待配对</h2>
         <p className="entry-muted">将邀请码发给对方</p>
         <div className="entry-code">{pair.invite_code}</div>
         <div className="entry-links"><button onClick={copyCode}>{copied ? '已复制' : '复制邀请码'}</button></div>
@@ -84,9 +84,9 @@ function PairPage({ userId, pair, onChanged }) {
   }
 
   return (
-    <section className="entry-card" aria-labelledby="pair-heading">
-      <h2 id="pair-heading" className="entry-heading">与对方配对</h2>
-      <button onClick={createPair} disabled={busy} className="entry-primary w-full">创建我们的空间</button>
+    <section className="entry-card panel-card" aria-labelledby="pair-heading">
+      <h2 id="pair-heading" className="entry-heading panel-title">与对方配对</h2>
+      <button onClick={createPair} disabled={busy} className="panel-primary w-full">创建我们的空间</button>
       <p className="entry-muted mt-2 text-center">创建后可获得邀请码</p>
       <div className="entry-divider">或者</div>
       <div className="flex gap-2">
@@ -97,9 +97,9 @@ function PairPage({ userId, pair, onChanged }) {
           value={joinCode}
           onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
           maxLength={6}
-          className="entry-input flex-1 font-mono tracking-widest"
+          className="panel-input flex-1 font-mono tracking-widest"
         />
-        <button onClick={joinPair} disabled={busy} className="entry-primary shrink-0">加入</button>
+        <button onClick={joinPair} disabled={busy} className="panel-primary shrink-0">加入</button>
       </div>
       {message && <p role="status" className="entry-message">{message}</p>}
     </section>

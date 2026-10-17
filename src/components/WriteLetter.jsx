@@ -216,7 +216,7 @@ export default function WriteLetter({ open, onClose, pair, userId, onDone, onSen
           <p role="status">{accessMessage || message || (!draftError && saved)}{(access === 'blocked' || access === 'unavailable') && <button type="button" className="ml-3 underline" disabled={closingPaper} onClick={() => setRetry((value) => value + 1)}>重试编辑</button>}</p>
         </div>
       </PaperWorkspace>
-      {previewPhoto && <Modal onClose={() => setPreviewId(null)} label="预览照片"><div className="flex h-full w-full flex-col items-center gap-4"><img src={previewPhoto.url} alt="分享前的完整照片" className="min-h-0 max-w-full flex-1 object-contain" /><button type="button" className="text-[#f7f2ee]" onClick={() => setPreviewId(null)}>关闭照片</button></div></Modal>}
+      {previewPhoto && <Modal onClose={() => setPreviewId(null)} label="预览照片"><div className="photo-panel panel-card"><img src={previewPhoto.url} alt="分享前的完整照片" /><button type="button" className="panel-ghost" onClick={() => setPreviewId(null)}>关闭照片</button></div></Modal>}
       {showSource && <SourcePanel onClose={() => setShowSource(false)} onInsert={insertSource} />}
     </Modal>
   )
@@ -229,14 +229,14 @@ function SourcePanel({ onClose, onInsert }) {
   return (
     <Panel open title="加出处" subtitle="选填，附在正文末尾，可直接修改或删除。" onClose={onClose}>
       <div className="space-y-4 text-sm">
-        <label className="block">作品与作者
-          <input value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2" />
+        <label className="block text-[var(--panel-muted)]">作品与作者
+          <input value={title} onChange={(event) => setTitle(event.target.value)} className="panel-input mt-2" />
         </label>
-        <label className="block">链接或页码
-          <input value={location} onChange={(event) => setLocation(event.target.value)} className="mt-2 w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2" />
+        <label className="block text-[var(--panel-muted)]">链接或页码
+          <input value={location} onChange={(event) => setLocation(event.target.value)} className="panel-input mt-2" />
         </label>
-        <div className="flex items-center justify-end gap-4">
-          <button type="button" onClick={onClose}>取消</button>
+        <div className="panel-actions">
+          <button type="button" onClick={onClose} className="panel-link">取消</button>
           <PrimaryButton type="button" disabled={!source} onClick={() => onInsert(source)}>插入正文</PrimaryButton>
         </div>
       </div>

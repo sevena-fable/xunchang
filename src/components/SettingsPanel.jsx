@@ -31,14 +31,14 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
   const close = () => { if (!lock.current) onClose() }
   return (
     <Panel open={open} onClose={close} title="设置" width="max-w-lg">
-      <label className="block text-sm">你的昵称
-        <input aria-label="你的昵称" value={nickname} disabled={busy} maxLength={12} onChange={(event) => setNickname(event.target.value)} className="mt-2 w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2 outline-none" />
+      <label className="block text-sm text-[var(--panel-muted)]">你的昵称
+        <input aria-label="你的昵称" value={nickname} disabled={busy} maxLength={12} onChange={(event) => setNickname(event.target.value)} className="panel-input mt-2" />
       </label>
-      <div className="my-5 rounded-xl border border-[#bac3d4]/70 px-4 py-3 text-sm leading-7">
+      <div className="panel-box my-5 px-4 py-3 text-sm leading-7">
         <p>与你通信的人是 {partnerNickname || '（对方还没填昵称）'}</p>
-        <p className="text-xs">邀请码 <span className="tracking-widest">{pair.invite_code}</span></p>
+        <p className="text-xs text-[var(--panel-muted)]">邀请码 <span className="tracking-widest text-[var(--panel-ink)]">{pair.invite_code}</span></p>
         <p className="flex items-center justify-between">背景音乐
-          <button type="button" onClick={toggleBgm} aria-label={bgmPlaying ? '静音背景音乐' : '播放背景音乐'} aria-pressed={bgmPlaying} className="rounded-lg p-1.5 text-[#857c91] hover:bg-[#edf0f4] hover:text-[#4a4358]">
+          <button type="button" onClick={toggleBgm} aria-label={bgmPlaying ? '静音背景音乐' : '播放背景音乐'} aria-pressed={bgmPlaying} className="rounded-lg p-1.5 text-[var(--panel-muted)] hover:bg-[var(--panel-soft)] hover:text-[var(--panel-ink)]">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M4 9.5v5h3l4.5 3.5V6L7 9.5H4z" />
               {bgmPlaying ? <><path d="M15.5 9a4 4 0 0 1 0 6" /><path d="M18 6.5a7.5 7.5 0 0 1 0 11" /></> : <path d="m16 9.5 5 5m0-5-5 5" />}
@@ -47,9 +47,9 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
         </p>
       </div>
       <p className="min-h-5 text-sm" role="status">{message}</p>
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <button type="button" disabled={busy} onClick={() => run(onLogout, '已离开桌前')} className="text-xs underline underline-offset-4">退出登录</button>
-        <div className="flex gap-2">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+        <button type="button" disabled={busy} onClick={() => run(onLogout, '已离开桌前')} className="panel-link text-xs">退出登录</button>
+        <div className="panel-actions">
           <GhostButton onClick={close} disabled={busy}>关闭</GhostButton>
           <PrimaryButton onClick={save} disabled={busy}>{busy ? '请稍候…' : '保存'}</PrimaryButton>
         </div>

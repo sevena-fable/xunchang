@@ -44,13 +44,13 @@ export default function HomePage({ userId, profile, pair, partnerNickname, onCha
           </svg>
         </button>
       </div>
-      {(error || loading) && <div role="status" className="absolute left-4 top-4 z-30 rounded-lg bg-[#857c91]/90 px-3 py-2 text-xs text-[#f7f2ee]">{error || '正在读取内容…'}{error && <button onClick={reload} className="ml-3 underline">重试</button>}</div>}
+      {(error || loading) && <div role="status" className="panel-toast absolute left-4 top-4 z-30 px-3 py-2">{error || '正在读取内容…'}{error && <button onClick={reload} className="ml-3 underline">重试</button>}</div>}
       <WriteLetter open={panel === 'write'} onClose={() => setPanel(null)} pair={pair} userId={userId} onSend={sendLetter} onDone={reload} />
       <CalendarPanel open={panel === 'calendar'} onClose={() => setPanel(null)} history={history} unread={unread} mySealed={mySealed} userId={userId} onRead={(letter) => { setPanel(null); setReadingId(letter.id) }} />
       <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} profile={profile} pair={pair} partnerNickname={partnerNickname} onSave={saveNickname} onLogout={logout} />
       {reading && <ReadLetter key={reading.id} letter={reading} userId={userId} reaction={reactions[reading.id]} reactionLoading={reactionLoading} reactionError={reactionError} onRetryReactions={reloadReactions} onClose={() => setReadingId(null)} onChanged={reload} onMarkRead={markRead} onDeliver={deliverLetter} onReact={submitReaction} resolveImages={resolveLetterImages} />}
       <Panel open={askBgm} title="背景音乐" subtitle="要播放音乐吗？之后可以在设置里随时开关。" onClose={() => setAskBgm(false)} width="max-w-sm">
-        <div className="flex justify-end gap-2">
+        <div className="panel-actions">
           <GhostButton onClick={() => setAskBgm(false)}>先不听</GhostButton>
           <PrimaryButton onClick={() => { startBgm(); setAskBgm(false) }}>播放</PrimaryButton>
         </div>

@@ -92,7 +92,7 @@ export default function ReadLetter({ letter, userId, reaction, reactionLoading =
         </div>
         <p className="letter-status" role="status">{message || imageError}{readFailed && <button type="button" className="ml-3 underline" onClick={markRead}>重试保存</button>}</p>
       </PaperWorkspace>
-      {zoom && <Modal onClose={() => setZoom(null)} label="查看照片"><div className="flex h-full max-w-full flex-col items-center gap-4"><img src={zoom} alt="放大的照片" className="min-h-0 max-w-full flex-1 object-contain" /><button type="button" className="text-[#f7f2ee]" onClick={() => setZoom(null)}>关闭照片</button></div></Modal>}
+      {zoom && <Modal onClose={() => setZoom(null)} label="查看照片"><div className="photo-panel panel-card"><img src={zoom} alt="放大的照片" /><button type="button" className="panel-ghost" onClick={() => setZoom(null)}>关闭照片</button></div></Modal>}
       <Panel open={confirmDelivery} onClose={() => { if (!busy) setConfirmDelivery(false) }} title="分享给对方">
         <p className="mb-5 text-sm">分享后对方就能看到，内容不能再修改。</p>
         <PrimaryButton disabled={busy} onClick={deliver}>{busy ? '正在分享…' : '确认分享'}</PrimaryButton>
@@ -126,11 +126,11 @@ function ReactionPanel({ reaction, loading, error, onRetry, mine, onClose, onSub
       {value ? <p className="flex items-center gap-3">{reactionOf(value.emoji) && <img src={reactionOf(value.emoji).icon} alt={reactionOf(value.emoji).label} className="h-12 w-12" />}{value.note && <span>「{value.note}」</span>}</p> : loading || error ? null : mine ? <p className="text-sm">还没有回应。</p> : (
         <>
           <p className="mb-4 text-sm">每条内容可以回应一次，送出后不能修改。</p>
-          <div className="mb-4 flex gap-3">{REACTIONS.map((item) => <button type="button" key={item.key} disabled={busy} aria-pressed={emoji === item.key} onClick={() => setEmoji(emoji === item.key ? '' : item.key)} className={`rounded-xl border p-2 transition-colors ${emoji === item.key ? 'border-[#d3c3cc] bg-[#ebdfe4]' : 'border-transparent hover:bg-[#edf0f4]'}`}><img src={item.icon} alt={item.label} className="h-12 w-12" /></button>)}</div>
-          <input aria-label="回应短评" value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} placeholder="想说的一句话（20 字以内）" className="w-full rounded-lg border border-[#bac3d4] bg-[#edf0f4] px-3 py-2 text-sm placeholder:text-[#857c91]" />
-          <p className="my-2 text-xs">{Array.from(note).length}/20</p>
+          <div className="panel-reactions">{REACTIONS.map((item) => <button type="button" key={item.key} disabled={busy} aria-pressed={emoji === item.key} onClick={() => setEmoji(emoji === item.key ? '' : item.key)} className="panel-reaction"><img src={item.icon} alt={item.label} /></button>)}</div>
+          <input aria-label="回应短评" value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} placeholder="想说的一句话（20 字以内）" className="panel-input text-sm" />
+          <p className="my-2 text-xs text-[var(--panel-muted)]">{Array.from(note).length}/20</p>
           <p role="status" className="mb-3 text-sm">{message}</p>
-          <button type="button" onClick={submit} disabled={busy || (!emoji && !note.trim())} className="rounded-xl border border-[#d3c3cc] bg-[#ebdfe4] px-6 py-2.5 text-sm tracking-[.18em] text-[#4a4358] transition-colors hover:bg-[#e2d3da] disabled:opacity-45">{busy ? '正在送出…' : '送出回应'}</button>
+          <button type="button" onClick={submit} disabled={busy || (!emoji && !note.trim())} className="panel-primary w-full">{busy ? '正在送出…' : '送出回应'}</button>
         </>
       )}
     </Panel>

@@ -48,15 +48,15 @@ export default function AuthPage({ recovery = false, canReset = false, onRecover
   function returnToLogin() { switchMode('login'); if (recovery) onRecoveryDone() }
   const expired = mode === 'reset' && !canReset
   return (
-    <section className="entry-card" aria-labelledby="auth-heading">
-      <h2 id="auth-heading" className="entry-heading">{{ login: '登录', register: '注册', forgot: '找回密码', reset: '设置新密码' }[mode]}</h2>
+    <section className="entry-card panel-card" aria-labelledby="auth-heading">
+      <h2 id="auth-heading" className="entry-heading panel-title">{{ login: '登录', register: '注册', forgot: '找回密码', reset: '设置新密码' }[mode]}</h2>
       {expired ? <p role="status" className="entry-message">重置链接已失效，请重新申请。</p> : !done && (
         <form onSubmit={submit} className="flex flex-col gap-4" aria-busy={busy}>
-          {mode === 'register' && <label className="entry-field">昵称<input aria-label="你的昵称" autoComplete="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={12} required disabled={busy} className="entry-input" /></label>}
-          {mode !== 'reset' && <label className="entry-field">邮箱<input aria-label="邮箱" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} className="entry-input" /></label>}
-          {mode !== 'forgot' && <label className="entry-field">{mode === 'reset' ? '新密码' : '密码'}<input aria-label={mode === 'reset' ? '新密码' : '密码'} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? '' : '至少 6 位'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} disabled={busy} className="entry-input" /></label>}
-          {mode === 'reset' && <label className="entry-field">确认新密码<input aria-label="确认新密码" type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required minLength={6} disabled={busy} className="entry-input" /></label>}
-          <button type="submit" disabled={busy} className="entry-primary mt-2">{busy ? { login: '正在登录…', register: '正在注册…', forgot: '正在发送…', reset: '正在保存…' }[mode] : { login: '登录', register: '注册', forgot: '发送重置邮件', reset: '保存新密码' }[mode]}</button>
+          {mode === 'register' && <label className="entry-field">昵称<input aria-label="你的昵称" autoComplete="nickname" value={nickname} onChange={(event) => setNickname(event.target.value)} maxLength={12} required disabled={busy} className="panel-input" /></label>}
+          {mode !== 'reset' && <label className="entry-field">邮箱<input aria-label="邮箱" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required disabled={busy} className="panel-input" /></label>}
+          {mode !== 'forgot' && <label className="entry-field">{mode === 'reset' ? '新密码' : '密码'}<input aria-label={mode === 'reset' ? '新密码' : '密码'} type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} placeholder={mode === 'login' ? '' : '至少 6 位'} value={password} onChange={(event) => setPassword(event.target.value)} required minLength={6} disabled={busy} className="panel-input" /></label>}
+          {mode === 'reset' && <label className="entry-field">确认新密码<input aria-label="确认新密码" type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required minLength={6} disabled={busy} className="panel-input" /></label>}
+          <button type="submit" disabled={busy} className="panel-primary mt-2">{busy ? { login: '正在登录…', register: '正在注册…', forgot: '正在发送…', reset: '正在保存…' }[mode] : { login: '登录', register: '注册', forgot: '发送重置邮件', reset: '保存新密码' }[mode]}</button>
         </form>
       )}
       <p role="status" className="entry-message">{message}</p>

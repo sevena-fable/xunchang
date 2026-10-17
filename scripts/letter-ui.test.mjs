@@ -987,7 +987,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
         const frames = []
         for (let i = 0; i < 24; i++) {
           await new Promise(requestAnimationFrame)
-          const list = document.querySelector('dialog section > .overflow-hidden')
+          const list = document.querySelector('dialog .panel-content > .overflow-hidden')
           if (list) frames.push(list.getBoundingClientRect().height)
         }
         return frames
@@ -1004,7 +1004,7 @@ for (const reducedMotion of ['reduce', 'no-preference']) {
       }
       const day = new Date().toLocaleDateString('en-CA')
       await page.locator(`dialog button[aria-label^="${day}，"]`).click()
-      await expect(page.locator('dialog section > .overflow-hidden')).toHaveCount(0)
+      await expect(page.locator('dialog .panel-content > .overflow-hidden')).toHaveCount(0)
       assert.deepEqual(backend, [])
       assert.deepEqual(errors, [])
     } finally { await context.close() }
@@ -1845,7 +1845,7 @@ for (const failure of [
   })
 }
 
-for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 900, height: 600 }]) {
+for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 900, height: 600 }, { width: 320, height: 640 }]) {
   test(`entry pages share the desk background and fit ${viewport.width}x${viewport.height}`, { timeout: 30000 }, async () => {
     const { context, page, state, login } = await live()
     const consoleErrors = []
@@ -1861,7 +1861,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 76
         const box = await page.locator('.entry-card').boundingBox()
         assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y + box.height <= viewport.height)
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
-        if (process.env.UI_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.UI_SCREENSHOT_DIR}/entry-${name}-${viewport.width}.png` })
+        await checkBotanicalPanel(page, `entry-${name}-${viewport.width}`)
       }
       await checkCard('login')
       await page.getByLabel('邮箱', { exact: true }).focus()
@@ -1947,5 +1947,139 @@ test('password recovery request and expired link are usable with mocked HTTP onl
     await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: '登录', exact: true })).toBeEnabled()
     assert.equal(new URL(page.url()).search, '')
+  } finally { await context.close() }
+})
+
+async function checkBotanicalPanel(page, name) {
+  const panel = page.locator('.panel-card:visible').last()
+  await expect(panel).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  const result = await panel.evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    const decoration = getComputedStyle(element, '::before')
+    const content = element.querySelector('.panel-content') || element
+    return {
+      inside: box.left >= 0 && box.top >= 0 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1,
+      overflow: content.scrollWidth > content.clientWidth + 1,
+      decoration: decoration.backgroundImage,
+      pointerEvents: decoration.pointerEvents,
+      background: getComputedStyle(element).backgroundColor,
+    }
+  })
+  assert.ok(result.inside, `${name}: panel outside viewport`)
+  assert.equal(result.overflow, false, `${name}: panel content overflows horizontally`)
+  assert.match(result.decoration, /panel-botanical\.svg/)
+  assert.equal(result.pointerEvents, 'none')
+  assert.notEqual(result.background, 'rgba(0, 0, 0, 0)')
+  if (process.env.UI_SCREENSHOT_DIR) await page.screenshot({ path: `${process.env.UI_SCREENSHOT_DIR}/${name}.png` })
+}
+
+for (const viewport of [{ width: 1366, height: 900 }, { width: 320, height: 640 }]) {
+  test(`botanical panels preserve settings, calendar and nested actions at ${viewport.width}`, { timeout: 60000 }, async () => {
+    const { context, page, backend, errors } = await preview(viewport)
+    try {
+      await page.getByRole('button', { name: '设置', exact: true }).click()
+      const settings = page.getByRole('dialog', { name: '设置', exact: true })
+      await checkBotanicalPanel(page, `settings-${viewport.width}`)
+      await settings.getByLabel('你的昵称').fill(' ')
+      await settings.getByRole('button', { name: '保存', exact: true }).click()
+      await expect(settings.getByRole('status')).toHaveText('昵称不能为空')
+      await settings.getByLabel('你的昵称').fill('窗边')
+      await settings.getByRole('button', { name: '保存', exact: true }).click()
+      await expect(settings.getByRole('status')).toHaveText('已保存')
+      await settings.locator('.panel-close').click()
+      await page.getByRole('button', { name: '台历', exact: true }).click()
+      await checkBotanicalPanel(page, `calendar-${viewport.width}`)
+      await page.getByRole('button', { name: '上个月', exact: true }).click()
+      await page.getByRole('button', { name: '下个月', exact: true }).click()
+      await page.getByRole('dialog').locator('.panel-close').click()
+
+      await page.setViewportSize({ width: 1366, height: 900 })
+      const input = await writer(page)
+      await input.fill('窗边的一封信。')
+      await expect(page.locator('.letter-sheet')).not.toHaveClass(/panel-card/)
+      await expect(page.locator('.letter-sheet')).toHaveCSS('background-image', /paper-floral\.png/)
+      await expect(page.locator('.letter-tools > button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await page.getByRole('button', { name: '加出处', exact: true }).click()
+      await page.setViewportSize(viewport)
+      await checkBotanicalPanel(page, `source-${viewport.width}`)
+      const source = page.getByRole('dialog', { name: '加出处', exact: true })
+      await source.getByLabel('作品与作者').fill('一段摘录')
+      await source.getByRole('button', { name: '插入正文', exact: true }).click()
+      await page.setViewportSize({ width: 1366, height: 900 })
+      await expect(input).toContainText('一段摘录')
+      await page.getByLabel('选择照片').setInputFiles(PHOTO)
+      await page.getByRole('button', { name: '预览照片 1', exact: true }).click()
+      await page.setViewportSize(viewport)
+      await checkBotanicalPanel(page, `photo-${viewport.width}`)
+      const photo = page.getByRole('dialog', { name: '预览照片', exact: true })
+      await expect(photo.getByRole('img')).toHaveJSProperty('naturalWidth', 1)
+      await photo.getByRole('button', { name: '关闭照片', exact: true }).click()
+      await page.setViewportSize({ width: 1366, height: 900 })
+      await page.getByRole('button', { name: '关闭信纸', exact: true }).click()
+
+      await page.getByRole('button', { name: '查看内容', exact: true }).click()
+      await expect(page.locator('.letter-sheet')).not.toHaveClass(/panel-card/)
+      await expect(page.locator('.letter-sheet')).toHaveCSS('background-image', /paper-floral\.png/)
+      await page.getByRole('button', { name: '留个回应', exact: true }).click()
+      await page.setViewportSize(viewport)
+      await checkBotanicalPanel(page, `reaction-${viewport.width}`)
+      const reaction = page.getByRole('dialog', { name: '你的回应', exact: true })
+      await reaction.getByRole('button', { name: '喜欢', exact: true }).click()
+      await reaction.getByLabel('回应短评').fill('收到啦')
+      await reaction.getByRole('button', { name: '送出回应', exact: true }).click()
+      await expect(reaction.getByText('「收到啦」')).toBeVisible()
+      await checkBotanicalPanel(page, `reaction-saved-${viewport.width}`)
+      await reaction.locator('.panel-close').click()
+      await page.setViewportSize({ width: 1366, height: 900 })
+      await page.getByRole('button', { name: '关闭信纸', exact: true }).click()
+      await page.getByRole('button', { name: '台历', exact: true }).click()
+      await page.getByRole('button', { name: /这段摘录还没分享/ }).click()
+      await page.getByRole('button', { name: '分享给对方', exact: true }).click()
+      await page.setViewportSize(viewport)
+      await checkBotanicalPanel(page, `confirm-${viewport.width}`)
+      await page.getByRole('button', { name: '确认分享', exact: true }).click()
+      await expect(page.getByRole('dialog', { name: '分享给对方', exact: true })).toBeHidden()
+      if (viewport.width < 900) await expect(page.locator('.paper-window-hint')).toBeVisible()
+      assert.deepEqual(backend, [])
+      assert.deepEqual(errors, [])
+    } finally { await context.close() }
+  })
+}
+
+test('botanical panels cover waiting, music, recovery and loading errors', { timeout: 60000 }, async () => {
+  const { context, page, state, login } = await live()
+  let waiting = true
+  try {
+    await page.route('**/rest/v1/pairs**', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify([{ id: PAIR, user_a: ME, user_b: waiting ? null : YOU, status: waiting ? 'waiting' : 'paired', invite_code: 'ABC234' }]) }))
+    await page.getByLabel('邮箱', { exact: true }).fill('test@example.com')
+    await page.getByLabel('密码', { exact: true }).fill('local-test-password')
+    await page.getByRole('button', { name: '登录', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '等待配对', exact: true })).toBeVisible()
+    await checkBotanicalPanel(page, 'waiting-pair')
+    await page.setViewportSize({ width: 320, height: 640 })
+    await checkBotanicalPanel(page, 'waiting-pair-mobile')
+    waiting = false
+    await page.reload()
+    const music = page.getByRole('dialog', { name: '背景音乐', exact: true })
+    await expect(music).toBeVisible()
+    await checkBotanicalPanel(page, 'music-mobile')
+    await page.setViewportSize({ width: 1366, height: 900 })
+    await checkBotanicalPanel(page, 'music')
+    await music.getByRole('button', { name: '先不听', exact: true }).click()
+    await page.goto(`${BASE}/?recovery=1`)
+    await expect(page.getByLabel('新密码', { exact: true })).toBeVisible()
+    await checkBotanicalPanel(page, 'reset-password')
+    await page.getByLabel('新密码', { exact: true }).fill('new-test-password')
+    await page.getByLabel('确认新密码', { exact: true }).fill('new-test-password')
+    await page.getByRole('button', { name: '保存新密码', exact: true }).click()
+    await expect(page.getByText('新密码已保存', { exact: true })).toBeVisible()
+    await checkBotanicalPanel(page, 'reset-success')
+    state.profileError = true
+    await page.goto(BASE)
+    await expect(page.getByRole('alert')).toBeVisible()
+    await checkBotanicalPanel(page, 'profile-error')
+    assert.deepEqual(state.unexpected, [])
+    assert.deepEqual(state.errors, [])
   } finally { await context.close() }
 })
