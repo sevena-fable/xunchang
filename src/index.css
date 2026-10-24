@@ -217,6 +217,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #857c91; outline-
   tab-size: 4; padding: 0; margin: 0; border: 0; box-sizing: border-box;
   width: 100%; color: var(--ink); font-kerning: auto;
 }
+.paper-text::selection, .paper-text *::selection { background: transparent; color: inherit; }
+.annotation-lines::selection { background: #dec9df; color: inherit; }
 .paper-mirror { position: absolute; top: var(--paper-baseline-offset); left: 0; visibility: hidden; pointer-events: none; }
 .paper-editor { display: block; position: absolute; top: var(--paper-baseline-offset); left: 0; outline: none; background: transparent; border-radius: 0; }
 .paper-editor:focus-visible { outline: none; }
@@ -238,6 +240,39 @@ button:focus-visible, input:focus-visible { outline: 2px solid #857c91; outline-
 .attachment-item { position: relative; }
 .attachment-tray .preview-photo { display: block; padding: 0; border: 0; border-radius: 3px; }
 .attachment-tray .remove-photo { position: absolute; top: -8px; right: -6px; padding: 0; width: 18px; height: 18px; line-height: 14px; background: #857c91; border-radius: 50%; }
+.annotation-marks { position: absolute; inset: 0; pointer-events: none; }
+.annotation-highlight, .paper-selection-mark { position: absolute; background: #F7D6D4; border-radius: 999px; }
+.annotation-focus { position: absolute; z-index: 2; pointer-events: none; padding: 0; border: 0; background: transparent; border-radius: 2px; }
+.annotation-focus:focus-visible { outline: 2px solid #857c91; outline-offset: 2px; }
+.annotation-message { position: absolute; bottom: 8px; left: 40px; right: 40px; font-size: 11px; line-height: 16px; text-align: center; color: #716278; }
+.annotation-modal { padding: 0; }
+.annotation-modal::backdrop { background: transparent; backdrop-filter: none; }
+.annotation-card {
+  --annotation-font-size: 16px; --annotation-line-height: 26px;
+  --panel-bg: #F7F2F4; --panel-border: #D8CBD8; --panel-ink: #65586B; --panel-muted: #857C91;
+  --panel-shadow: 0 2px 5px #4a435807, 0 6px 16px #4a43580d;
+  position: fixed; width: 120px; padding: 34px 16px 12px; background: var(--panel-bg); color: var(--panel-ink);
+  border: 1px solid var(--panel-border); border-radius: 8px; box-shadow: var(--panel-shadow);
+}
+.annotation-card svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.annotation-card button {
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 4px;
+  color: var(--panel-muted); background: transparent; transition: color .12s, background-color .12s;
+}
+.annotation-card button:not(:disabled):hover { color: var(--panel-ink); background: var(--panel-soft); }
+.annotation-card button:focus-visible { outline: 1px solid var(--panel-muted); outline-offset: 1px; background: var(--panel-soft); }
+.annotation-close { position: absolute; top: 4px; right: 6px; }
+.annotation-lines {
+  display: block; width: 100%; height: var(--annotation-line-height); margin: 0; padding: 0; border: 0; border-radius: 0;
+  resize: none; overflow: hidden; color: inherit; background: transparent;
+  font-family: 'LXGW WenKai', 'KaiTi', 'STKaiti', serif; font-size: var(--annotation-font-size); line-height: var(--annotation-line-height);
+  white-space: pre-wrap; overflow-wrap: anywhere; word-break: normal; tab-size: 4;
+}
+.annotation-lines:focus-visible { outline: none; }
+.annotation-lines[aria-invalid="true"] { outline: 1px solid #b67e98; outline-offset: 4px; }
+.annotation-actions { position: absolute; top: 4px; left: 6px; right: 38px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.annotation-actions .annotation-delete { margin-right: auto; }
+.annotation-save:disabled { opacity: .38; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

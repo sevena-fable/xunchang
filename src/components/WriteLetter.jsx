@@ -5,6 +5,7 @@ import Modal from './Modal'
 import Panel, { PrimaryButton } from './Panel'
 import PaperSheet, { PaperWorkspace, usePaperViewport } from './PaperSheet'
 import { selectPaperText } from '../lib/paper'
+import { characterCount, moveAnnotations } from '../lib/annotations'
 import { sfxPaper, sfxSeal } from '../lib/sfx'
 
 const STYLE = getStationery('cream')
@@ -167,7 +168,8 @@ export default function WriteLetter({ open, onClose, pair, userId, onDone, onSen
     if (locked) return
     const separator = !draft.content || draft.content.endsWith('\n\n') ? '' : draft.content.endsWith('\n') ? '\n' : '\n\n'
     const content = `${draft.content}${separator}出处：${source}`
-    edit({ ...draft, content })
+    const end = characterCount(draft.content)
+    edit({ ...draft, content, annotations: moveAnnotations(draft.content, content, draft.annotations, { start: end, end }) })
     setShowSource(false)
     requestAnimationFrame(() => {
       if (!inputRef.current) return
@@ -196,7 +198,7 @@ export default function WriteLetter({ open, onClose, pair, userId, onDone, onSen
   return (
     <Modal open={open} onClose={close} label="给你看看" closeOnBackdrop={false}>
       <PaperWorkspace fitsViewport={fitsViewport} onClose={close} disabled={busy || closingPaper}>
-        <PaperSheet inputRef={inputRef} style={STYLE} content={draft.content} onChange={(content) => edit({ ...draft, content })} header="给你看看" onClose={close} disabled={busy || closingPaper} readOnly={!ready || access !== 'editing' || draft.attempted} />
+        <PaperSheet key={draft.id} inputRef={inputRef} style={STYLE} content={draft.content} annotations={draft.annotations} onChange={(content, annotations) => edit({ ...draft, content, annotations })} onAnnotationsChange={(annotations) => edit({ ...draft, annotations })} header="给你看看" onClose={close} disabled={busy || closingPaper} readOnly={!ready || access !== 'editing' || draft.attempted} />
         <div className="letter-tools">
           <div className="attachment-tray">
             <button type="button" onClick={() => fileRef.current?.click()} disabled={locked || draft.attachments.length >= 3}>加照片</button>

@@ -40,7 +40,7 @@ function Preview() {
   const send = useCallback(async (draft) => {
     if (sent.current.has(draft.id)) return sent.current.get(draft.id)
     const now = new Date().toISOString()
-    const letter = { id: draft.id, pair_id: pair.id, sender_id: ME, content: draft.content, images: draft.attachments.map((item) => item.file), stationery: 'cream', status: 'delivered', sealed_at: now, delivered_at: now }
+    const letter = { id: draft.id, pair_id: pair.id, sender_id: ME, content: draft.content, annotations: draft.annotations, images: draft.attachments.map((item) => item.file), stationery: 'cream', status: 'delivered', sealed_at: now, delivered_at: now }
     sent.current.set(draft.id, letter)
     setLetters((items) => [letter, ...items])
     return letter

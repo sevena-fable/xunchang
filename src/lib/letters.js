@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { fileHash, imagePath, IMAGE_EXTENSIONS, validateAttachments } from './letterImages'
+import { sameAnnotations, validateAnnotations } from './annotations'
 
 const bucket = supabase.storage.from('letter-images')
 
@@ -14,27 +15,29 @@ async function findLetter(id) {
 }
 
 function sameLetter(letter, input) {
-  return letter.sender_id === input.userId && letter.pair_id === input.pairId && letter.content === input.content && letter.stationery === input.stationery && JSON.stringify(letter.images) === JSON.stringify(input.images)
+  return letter.sender_id === input.userId && letter.pair_id === input.pairId && letter.content === input.content && letter.stationery === input.stationery && JSON.stringify(letter.images) === JSON.stringify(input.images) && sameAnnotations(letter.annotations, input.annotations)
 }
 
-export async function insertLetter({ id, pairId, userId, content, stationery = 'cream', images = [], deliver = true }) {
-  const input = { id, pairId, userId, content, stationery, images }
+export async function insertLetter({ id, pairId, userId, content, annotations = [], stationery = 'cream', images = [], deliver = true }) {
+  try { validateAnnotations(content, annotations) } catch (error) { throw failure(error, true) }
+  const input = { id, pairId, userId, content, annotations, stationery, images }
   const existing = await findLetter(id)
   if (existing) {
     if (!sameLetter(existing, input)) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
     return existing
   }
   const now = new Date().toISOString()
-  const { data, error, status } = await supabase.from('letters').insert({ id, pair_id: pairId, sender_id: userId, content, stationery, images, status: deliver ? 'delivered' : 'sealed', delivered_at: deliver ? now : null }).select().single().abortSignal(AbortSignal.timeout(20000))
+  const { data, error, status } = await supabase.from('letters').insert({ id, pair_id: pairId, sender_id: userId, content, annotations, stationery, images, status: deliver ? 'delivered' : 'sealed', delivered_at: deliver ? now : null }).select().single().abortSignal(AbortSignal.timeout(20000))
   if (!error) return data
   const confirmed = await findLetter(id)
   if (confirmed && sameLetter(confirmed, input)) return confirmed
   if (confirmed) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
+  if (error.code === 'PGRST204' && /annotations/.test(error.message)) throw failure(new Error('批注存储尚未就绪，请先完成批注数据库迁移'), true)
   throw failure(error, status >= 400 && status < 500 && status !== 408 && error.code !== '57014')
 }
 
-export async function sendLetter({ id, pairId, userId, content, attachments }) {
-  try { validateAttachments(attachments) } catch (error) { throw failure(error, true) }
+export async function sendLetter({ id, pairId, userId, content, annotations = [], attachments }) {
+  try { validateAttachments(attachments); validateAnnotations(content, annotations) } catch (error) { throw failure(error, true) }
   const objects = await Promise.all(attachments.map(async (attachment) => {
     const hash = await fileHash(attachment.file)
     return { file: attachment.file, hash, path: `${userId}/${id}/${attachment.id}-${hash}.${IMAGE_EXTENSIONS[attachment.file.type]}` }
@@ -42,7 +45,7 @@ export async function sendLetter({ id, pairId, userId, content, attachments }) {
   const images = objects.map((item) => item.path)
   const existing = await findLetter(id)
   if (existing) {
-    if (!sameLetter(existing, { pairId, userId, content, stationery: 'cream', images })) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
+    if (!sameLetter(existing, { pairId, userId, content, annotations, stationery: 'cream', images })) throw new Error('这次分享已有不同内容的记录，请先在台历核对')
     return existing
   }
   if (objects.length) {
@@ -60,7 +63,7 @@ export async function sendLetter({ id, pairId, userId, content, attachments }) {
     }
     throw failure(error, true)
   }
-  return insertLetter({ id, pairId, userId, content, images, deliver: true })
+  return insertLetter({ id, pairId, userId, content, annotations, images, deliver: true })
 }
 
 export async function resolveLetterImages(images) {

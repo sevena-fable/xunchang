@@ -5,7 +5,7 @@ export function draftKey(environment, userId, pairId) {
 }
 
 export function emptyDraft() {
-  return { id: crypto.randomUUID(), content: '', attachments: [], attempted: false }
+  return { id: crypto.randomUUID(), content: '', annotations: [], attachments: [], attempted: false }
 }
 
 function openDatabase() {
@@ -64,7 +64,8 @@ export async function acquireDraft(key) {
 }
 
 export async function loadDraft(key) {
-  return await transaction('readonly', (store) => store.get(key)) || emptyDraft()
+  const draft = await transaction('readonly', (store) => store.get(key))
+  return draft ? { annotations: [], ...draft } : emptyDraft()
 }
 
 export function saveDraft(key, draft) {

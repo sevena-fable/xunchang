@@ -59,9 +59,17 @@ export function writePaperText(root, text) {
   }) : []))
 }
 
-export function paperSelection(root) {
+export function paperSelection(root, editable = true) {
   const selection = root.ownerDocument.getSelection()
   if (!selection?.rangeCount || !root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) return null
+  if (!editable) {
+    const prefix = root.ownerDocument.createRange()
+    prefix.selectNodeContents(root)
+    prefix.setEnd(selection.anchorNode, selection.anchorOffset)
+    const anchor = prefix.toString().length
+    prefix.setEnd(selection.focusNode, selection.focusOffset)
+    return { anchor, focus: prefix.toString().length }
+  }
   const { offsets } = paperDocument(root)
   return { anchor: offsets.get(selection.anchorNode)[selection.anchorOffset], focus: offsets.get(selection.focusNode)[selection.focusOffset] }
 }
@@ -71,6 +79,32 @@ export function selectPaperText(root, anchor, focus = anchor) {
   const start = points[Math.max(0, Math.min(anchor, text.length))]
   const end = points[Math.max(0, Math.min(focus, text.length))]
   root.ownerDocument.getSelection().setBaseAndExtent(...start, ...end)
+}
+
+export function paperInputRange(root, range) {
+  if (!range || !root.contains(range.startContainer) || !root.contains(range.endContainer)) return null
+  const { offsets } = paperDocument(root)
+  return { anchor: offsets.get(range.startContainer)[range.startOffset], focus: offsets.get(range.endContainer)[range.endOffset] }
+}
+
+export function paperTextRects(root, start, end, editable) {
+  if (!root || start >= end) return []
+  const offsets = editable ? paperDocument(root).offsets : null
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const rects = []
+  let node
+  let position = 0
+  while ((node = walker.nextNode())) {
+    const from = offsets ? offsets.get(node)[0] : position
+    const to = offsets ? offsets.get(node).at(-1) : position + node.length
+    position = to
+    if (from >= end || to <= start) continue
+    const range = root.ownerDocument.createRange()
+    range.setStart(node, Math.max(0, start - from))
+    range.setEnd(node, Math.min(to - from, end - from))
+    rects.push(...Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0))
+  }
+  return rects
 }
 
 export function pageMetrics(totalHeight, availableHeight) {

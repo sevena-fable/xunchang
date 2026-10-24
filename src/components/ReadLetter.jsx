@@ -78,7 +78,7 @@ export default function ReadLetter({ letter, userId, reaction, reactionLoading =
   return (
     <Modal onClose={close} label="查看内容" closeOnBackdrop={false}>
       <PaperWorkspace fitsViewport={fitsViewport} onClose={close} disabled={busy}>
-        <PaperSheet style={style} content={letter.content} header={header} onClose={close} disabled={busy} />
+        <PaperSheet style={style} content={letter.content} annotations={letter.annotations} header={header} onClose={close} disabled={busy} />
         <div className="letter-tools">
           <div className="attachment-tray">
             {images.map((url, index) => <button type="button" key={url} aria-label={`查看照片 ${index + 1}`} onClick={() => setZoom(url)} style={{ padding: 0, border: 0 }}><img src={url} alt={`分享的照片 ${index + 1}`} /></button>)}
