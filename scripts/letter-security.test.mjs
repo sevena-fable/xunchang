@@ -43,6 +43,11 @@ test('migration and RLS enforce private letters, images, reactions and pairing',
     await db.exec(migration)
     await db.exec(migration)
     await db.exec(await sqlFile('migrations/20261024005756_letter_annotations.sql'))
+    const beforeLimitRemoval = await db.query('select * from public.letters order by id')
+    const removeLimit = await sqlFile('migrations/20261029053457_remove_annotation_limit.sql')
+    await db.exec(removeLimit)
+    await db.exec(removeLimit)
+    assert.deepEqual(await db.query('select * from public.letters order by id'), beforeLimitRemoval)
     assert.deepEqual((await db.query('select annotations from public.letters')).rows, [{ annotations: [] }, { annotations: [] }])
     assert.deepEqual((await db.query(`select public, file_size_limit::integer, allowed_mime_types from storage.buckets where id='letter-images'`)).rows, [
       { public: false, file_size_limit: 6291456, allowed_mime_types: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] },
@@ -103,7 +108,7 @@ test('migration and RLS enforce private letters, images, reactions and pairing',
     await assert.rejects(db.exec(`select public.join_pair('UVWXYZ')`))
 
     const content = '甲🐦é乙'
-    const item = { id: A, start: 1, end: 4, quote: '🐦é', note: '🐦'.repeat(100) }
+    const item = { id: A, start: 1, end: 4, quote: '🐦é', note: '长批注\n'.repeat(10000) }
     const second = { id: B, start: 4, end: 5, quote: '乙', note: 'v' }
     const annotated = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
     const insert = (items, sender = A, id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee') => db.query(
@@ -115,7 +120,7 @@ test('migration and RLS enforce private letters, images, reactions and pairing',
     assert.equal(metadata.provolatile, 'i')
     assert.equal(metadata.prosecdef, false)
     assert.deepEqual(metadata.proconfig, ['search_path=pg_catalog'])
-    const invalid = [null, {}, 'text', 42, true, [null], [1], [[]], [{}], [{ ...item, id: 'wrong' }], [{ ...item, start: -1 }], [{ ...item, start: '1' }], [{ ...item, start: 1.5 }], [{ ...item, start: null }], [{ ...item, end: 1 }], [{ ...item, end: 1e30 }], [{ ...item, end: 6 }], [{ ...item, quote: '甲' }], [{ ...item, note: '🐦'.repeat(101) }], [{ ...item, note: 1 }], [{ ...item, note: null }], [item, item], [second, item], [item, { ...second, start: 3 }]]
+    const invalid = [null, {}, 'text', 42, true, [null], [1], [[]], [{}], [{ ...item, id: 'wrong' }], [{ ...item, start: -1 }], [{ ...item, start: '1' }], [{ ...item, start: 1.5 }], [{ ...item, start: null }], [{ ...item, end: 1 }], [{ ...item, end: 1e30 }], [{ ...item, end: 6 }], [{ ...item, quote: '甲' }], [{ ...item, note: 1 }], [{ ...item, note: null }], [item, item], [second, item], [item, { ...second, start: 3 }]]
     const whitespace = ' \t\n\r\f\v\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
     for (const note of ['', ...whitespace]) invalid.push([{ ...item, note }])
     for (const field of ['id', 'start', 'end', 'quote', 'note']) {
@@ -123,7 +128,7 @@ test('migration and RLS enforce private letters, images, reactions and pairing',
     }
     for (const items of invalid) await assert.rejects(insert(items), { code: '23514' })
     await assert.rejects(db.query('insert into public.letters(pair_id,sender_id,content,annotations) values ($1,$2,$3,null)', [PAIR, A, content]), { code: '23502' })
-    for (const note of ['v', 'é'.repeat(50), '\u0085', '\u200b', '\t有效\n']) {
+    for (const note of ['v', '🐦'.repeat(101), 'é'.repeat(5000), '\u0085', '\u200b', '\t有效\n']) {
       assert.equal((await db.query('select public.valid_letter_annotations($1,$2::jsonb) as valid', [content, JSON.stringify([{ ...item, note }])])).rows[0].valid, true)
     }
     assert.equal((await db.query('select public.valid_letter_annotations($1,$2::jsonb) as valid', [' ', JSON.stringify([{ ...item, start: 0, end: 1, quote: ' ', note: '说明' }])])).rows[0].valid, false)

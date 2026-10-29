@@ -1,4 +1,3 @@
-export const ANNOTATION_LIMIT = 100
 const ID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/
 
 export const characterCount = (text) => Array.from(text).length
@@ -14,8 +13,8 @@ export function validateAnnotations(content, annotations) {
     if (!item || typeof item !== 'object' || Array.isArray(item) || typeof item.id !== 'string' || !ID.test(item.id) || ids.has(item.id)
       || !Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end) || item.start < end || item.start >= item.end || item.end > characters.length
       || typeof item.quote !== 'string' || !item.quote.trim() || item.quote !== characters.slice(item.start, item.end).join('')
-      || typeof item.note !== 'string' || !item.note.trim() || characterCount(item.note) > ANNOTATION_LIMIT) {
-      throw new Error('批注需对应有效且不重叠的原文，每条限 100 字')
+      || typeof item.note !== 'string' || !item.note.trim()) {
+      throw new Error('批注内容不能为空，且需对应有效、不重叠的原文')
     }
     ids.add(item.id)
     end = item.end

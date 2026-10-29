@@ -16,10 +16,11 @@ expect.extend({
 
 const PORT = process.env.TEST_PORT || '5187'
 const BASE = `http://127.0.0.1:${PORT}`
+const PRODUCTION = process.env.TEST_PRODUCTION === '1'
 let browser
 let server
 before(async () => {
-  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', PORT, '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] })
+  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', ...(PRODUCTION ? ['preview'] : []), '--host', '127.0.0.1', '--port', PORT, '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] })
   await new Promise((resolve, reject) => {
     let output = ''
     const timer = setTimeout(() => reject(new Error('测试服务器未启动：' + output)), 20000)
@@ -127,19 +128,20 @@ async function expectPinkBands(page, selector = '.annotation-highlight') {
   }))).toBe(true)
 }
 
-test('annotations right-click, limit, edit, persist and read without changing paper text', { timeout: 45000 }, async () => {
+test('annotations right-click, edit, persist and read long notes without changing paper text', { timeout: 45000 }, async () => {
   const { context, page, backend, errors } = await preview()
   try {
     let input = await writer(page)
+    const longNote = '改后的批注 <b>仍是纯文本</b>\n'.repeat(200)
     const text = '第一段里的花。\n\n第二段里也有花🐦。\n'
     await input.fill(text)
     const pages = await page.getByLabel('信纸页码').textContent()
     let panel = await selectAnnotation(page, 0, 6)
     await expect(panel.getByRole('button', { name: '保存批注' })).toBeDisabled()
     await panel.getByRole('textbox', { name: '批注内容' }).fill('🐦'.repeat(101))
-    await expect(panel.getByRole('textbox', { name: '批注内容' })).toHaveValue('🐦'.repeat(100))
+    await expect(panel.getByRole('textbox', { name: '批注内容' })).toHaveValue('🐦'.repeat(101))
     await expect(panel.getByRole('button', { name: '保存批注' })).toBeEnabled()
-    await expect(panel.getByRole('status')).toHaveText('100/100')
+    await expect(panel.getByRole('status')).toHaveCount(0)
     await panel.getByRole('button', { name: '关闭批注' }).click()
     await expect(page.locator('.annotation-highlight')).toHaveCount(0)
     await expect(input).toBeFocused()
@@ -151,10 +153,10 @@ test('annotations right-click, limit, edit, persist and read without changing pa
     panel = page.getByRole('dialog', { name: '编辑批注', exact: true })
     await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(247, 242, 244)')
     await expect(panel.locator('.annotation-card')).toHaveCSS('background-image', 'none')
-    await panel.getByRole('textbox', { name: '批注内容' }).fill('改后的批注 <b>仍是纯文本</b>')
+    await panel.getByRole('textbox', { name: '批注内容' }).fill(longNote)
     await panel.getByRole('button', { name: '保存批注' }).click()
     await selectAnnotation(page, 2, 8)
-    await expect(page.getByRole('textbox', { name: '批注内容' })).toHaveValue('改后的批注 <b>仍是纯文本</b>')
+    await expect(page.getByRole('textbox', { name: '批注内容' })).toHaveValue(longNote)
     await page.keyboard.press('Escape')
     await expect(panel).toBeHidden()
     await expect(input).toBeVisible()
@@ -162,7 +164,7 @@ test('annotations right-click, limit, edit, persist and read without changing pa
     input = await writer(page)
     await expect(input).toHavePaperText(text)
     await clickMark(page)
-    await expect(page.getByRole('textbox', { name: '批注内容' })).toHaveValue('改后的批注 <b>仍是纯文本</b>')
+    await expect(page.getByRole('textbox', { name: '批注内容' })).toHaveValue(longNote)
     await page.mouse.click(8, 8)
     await expect(input).toBeVisible()
     await page.getByRole('button', { name: '分享给对方', exact: true }).click()
@@ -174,7 +176,7 @@ test('annotations right-click, limit, edit, persist and read without changing pa
     assert.equal(await page.locator('.paper-reading').textContent(), text)
     await clickMark(page)
     const reading = page.getByRole('dialog', { name: '查看批注', exact: true })
-    await expect(reading.locator('.annotation-note')).toHaveText('改后的批注 <b>仍是纯文本</b>')
+    await expect(reading.locator('.annotation-note')).toHaveText(longNote)
     await expect(reading.locator('textarea, b')).toHaveCount(0)
     await page.keyboard.press('Escape')
     const entry = page.getByRole('button', { name: '批注：第一段里的花', exact: true })
@@ -346,38 +348,40 @@ test('annotations leave no temporary color after cancellation or deletion and re
   } finally { await context.close() }
 })
 
-test('annotations cap typing and partial paste at 100 without losing unselected text', { timeout: 30000 }, async () => {
+test('annotations retain typing and partial paste beyond 100 without losing unselected text', { timeout: 30000 }, async () => {
   const { context, page, errors } = await preview()
   try {
     const input = await writer(page)
-    await input.fill('输入不能超过一百字。')
+    await input.fill('输入可以超过一百字。')
     await selectAnnotation(page, 0, 4)
     const note = page.getByRole('textbox', { name: '批注内容' })
     await note.pressSequentially('a'.repeat(101))
-    await expect(note).toHaveValue('a'.repeat(100))
+    await expect(note).toHaveValue('a'.repeat(101))
     await note.press('Control+Home')
     await note.press('X')
-    await expect(note).toHaveValue('a'.repeat(100))
+    await expect(note).toHaveValue('X' + 'a'.repeat(101))
     await note.press('Control+End')
     await note.press('Backspace')
     await note.press('b')
-    await expect(note).toHaveValue('a'.repeat(99) + 'b')
+    await expect(note).toHaveValue('X' + 'a'.repeat(100) + 'b')
     await note.fill('前'.repeat(50) + '后'.repeat(50))
     await note.evaluate((root) => root.setSelectionRange(49, 51))
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-    await page.evaluate(() => navigator.clipboard.writeText('🐦'.repeat(3)))
+    await page.evaluate(() => navigator.clipboard.writeText('🐦'.repeat(1000)))
     await note.press('Control+v')
-    await expect(note).toHaveValue('前'.repeat(49) + '🐦'.repeat(2) + '后'.repeat(49))
-    assert.equal(await note.evaluate((root) => root.selectionStart), 53)
+    await expect(note).toHaveValue('前'.repeat(49) + '🐦'.repeat(1000) + '后'.repeat(49))
+    assert.equal(await note.evaluate((root) => root.selectionStart), 2049)
     await note.fill('字'.repeat(98) + '尾')
     await note.press('Control+Home')
     const cdp = await context.newCDPSession(page)
     await cdp.send('Input.imeSetComposition', { text: '寻常', selectionStart: 2, selectionEnd: 2 })
+    await note.evaluate((root) => root.form.requestSubmit())
+    await expect(note).toBeVisible()
     await cdp.send('Input.insertText', { text: '寻常' })
-    await expect(note).toHaveValue('寻' + '字'.repeat(98) + '尾')
+    await expect(note).toHaveValue('寻常' + '字'.repeat(98) + '尾')
     await page.getByRole('button', { name: '保存批注' }).click()
     await clickMark(page)
-    await expect(note).toHaveValue('寻' + '字'.repeat(98) + '尾')
+    await expect(note).toHaveValue('寻常' + '字'.repeat(98) + '尾')
     assert.deepEqual(errors, [])
   } finally { await context.close() }
 })
@@ -421,7 +425,7 @@ test('annotations follow repeated text edits, deletion, native undo redo and com
   } finally { await context.close() }
 })
 
-test('annotations handle merged typing undo, same-text replacement, paste limits and note composition', { timeout: 45000 }, async () => {
+test('annotations handle merged typing undo, same-text replacement, long paste and note composition', { timeout: 45000 }, async () => {
   const { context, page, backend, errors } = await preview()
   try {
     const input = await writer(page)
@@ -451,17 +455,17 @@ test('annotations handle merged typing undo, same-text replacement, paste limits
     const cdp = await context.newCDPSession(page)
     await cdp.send('Input.imeSetComposition', { text: '寻常', selectionStart: 2, selectionEnd: 2 })
     await cdp.send('Input.insertText', { text: '寻常' })
-    await expect(note).toHaveValue('字'.repeat(99) + '寻')
+    await expect(note).toHaveValue('字'.repeat(99) + '寻常')
     await expect(page.getByRole('button', { name: '保存批注' })).toBeEnabled()
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.evaluate(() => navigator.clipboard.writeText('🐦'.repeat(101)))
     await note.press('Control+a')
     await note.press('Control+v')
-    await expect(page.locator('#annotation-count')).toHaveText('100/100')
-    await expect(page.locator('#annotation-count')).toHaveCSS('position', 'absolute')
+    await expect(note).toHaveValue('🐦'.repeat(101))
+    await expect(page.locator('#annotation-count')).toHaveCount(0)
     await page.getByRole('button', { name: '保存批注' }).click()
     await clickMark(page)
-    await expect(note).toHaveValue('🐦'.repeat(100))
+    await expect(note).toHaveValue('🐦'.repeat(101))
     assert.deepEqual(backend, [])
     assert.deepEqual(errors, [])
   } finally { await context.close() }
@@ -531,13 +535,13 @@ for (const reading of [false, true]) {
 }
 
 for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
-  test(`annotations size pearl notes to their content without scrolling at ${width}x${height}`, { timeout: 45000 }, async () => {
+  test(`annotations size short pearl notes and scroll long notes at ${width}x${height}`, { timeout: 60000 }, async () => {
     const { context, page, backend, errors } = await preview({ width, height })
     try {
       const input = await writer(page)
       const text = '春夏秋冬花，留在原文里的底色。'
       const short = '这十个字只需要一小行'
-      const notes = ['花'.repeat(100), '🐦'.repeat(100), 'e\u0301'.repeat(50), ('花'.repeat(9) + '\n').repeat(10), '字\n'.repeat(50), '花', short, 'W'.repeat(100), '风\t花\n\n月\t光\n', ' \n'.repeat(49) + '字\n']
+      const notes = ['花'.repeat(100), '🐦'.repeat(1000), 'e\u0301'.repeat(5000), ('花'.repeat(9) + '\n').repeat(100), '字\n'.repeat(50), '花', short, 'W'.repeat(1000), '风\t花\n\n月\t光\n', ' \n'.repeat(499) + '字\n']
       const dimensions = () => page.locator('.annotation-card').evaluate((element) => ({ width: element.offsetWidth, height: element.offsetHeight }))
       const fits = async () => {
         await expect.poll(() => page.locator('.annotation-lines').evaluate((element) => {
@@ -545,8 +549,9 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
           const box = card.getBoundingClientRect()
           const content = element.getBoundingClientRect()
           const buttons = [...card.querySelectorAll('button')].map((button) => button.getBoundingClientRect())
-          return element.scrollHeight <= element.clientHeight + 1 && element.scrollWidth <= element.clientWidth + 1
-            && element.scrollTop === 0 && element.scrollLeft === 0
+          return element.scrollWidth <= element.clientWidth + 1 && element.scrollLeft === 0
+            && getComputedStyle(element).fontSize === '16px' && getComputedStyle(element).lineHeight === '26px'
+            && (element.scrollHeight <= element.clientHeight + 1 || getComputedStyle(element).overflowY === 'auto')
             && box.x >= 16 && box.y >= 16 && box.right <= innerWidth - 15 && box.bottom <= innerHeight - 15
             && buttons.every((button, index) => button.bottom <= content.top && button.left >= box.left && button.right <= box.right
               && buttons.every((other, otherIndex) => index === otherIndex || button.right <= other.left || other.right <= button.left))
@@ -575,7 +580,7 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
       await fits()
       const compact = await dimensions()
       assert.ok(compact.width > empty.width && compact.width <= 210 && compact.height === empty.height)
-      await page.keyboard.insertText('花'.repeat(90))
+      await page.keyboard.insertText('花'.repeat(2000))
       await fits()
       const full = await dimensions()
       assert.ok(full.width > compact.width && full.height > compact.height)
@@ -591,7 +596,6 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
       await expect(page.locator('.paper-selection-mark')).toHaveCount(0)
       const savedSizes = []
       for (const [index, note] of notes.entries()) {
-        assert.ok(Array.from(note).length <= 100)
         const panel = await selectAnnotation(page, index, index + 1)
         await expect(panel.locator('h3, blockquote, [placeholder]')).toHaveCount(0)
         assert.equal(await panel.locator('.annotation-card').evaluate((element) => {
@@ -601,9 +605,19 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
         }), '')
         await panel.getByRole('textbox', { name: '批注内容' }).fill(note)
         await fits()
-        await panel.getByRole('textbox', { name: '批注内容' }).press('Control+End')
+        await noteInput.press('Control+End')
         await fits()
-        if (index === 0) await expect(page.locator('.annotation-lines')).toHaveCSS('font-size', '16px')
+        const scrolling = await noteInput.evaluate((element) => element.scrollHeight > element.clientHeight + 1)
+        if (scrolling) {
+          await expect.poll(() => noteInput.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThanOrEqual(3)
+          await noteInput.press('Enter')
+          await page.keyboard.insertText('末尾仍可继续写')
+          await expect(noteInput).toHaveValue(note + '\n末尾仍可继续写')
+          await expect.poll(() => noteInput.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThanOrEqual(3)
+          await noteInput.fill(note)
+        } else {
+          assert.equal(await noteInput.evaluate((element) => element.scrollTop), 0)
+        }
         savedSizes.push(await dimensions())
         await panel.getByRole('button', { name: '保存批注' }).click()
         await clickMark(page, index)
@@ -634,7 +648,12 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
         await clickMark(page, index)
         assert.equal(await page.locator('.annotation-note').textContent(), note)
         await fits()
-        if (!note.includes('\n')) assert.deepEqual(await dimensions(), savedSizes[index])
+        assert.deepEqual(await dimensions(), savedSizes[index])
+        const reading = page.locator('.annotation-note')
+        await reading.focus()
+        await reading.press('Control+End')
+        await expect.poll(() => reading.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThanOrEqual(1)
+        await fits()
         await expect(page.getByRole('button', { name: '保存批注' })).toHaveCount(0)
         await page.getByRole('button', { name: '关闭批注' }).click()
       }
@@ -1768,11 +1787,17 @@ async function live() {
   await page.goto(BASE)
   const token = [Buffer.from('{"alg":"HS256","typ":"JWT"}').toString('base64url'), Buffer.from(JSON.stringify({ sub: ME, aud: 'authenticated', role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url'), 'test'].join('.')
   const login = async (choice = '先不听') => {
-    await page.evaluate(async (accessToken) => {
-      const { supabase } = await import('/src/lib/supabase.js')
-      const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'local-test-only' })
-      if (error) throw error
-    }, token)
+    if (PRODUCTION) {
+      await page.getByRole('textbox', { name: '邮箱', exact: true }).fill(user.email)
+      await page.getByLabel('密码', { exact: true }).fill('local-test-only')
+      await page.getByRole('button', { name: '登录', exact: true }).click()
+    } else {
+      await page.evaluate(async (accessToken) => {
+        const { supabase } = await import('/src/lib/supabase.js')
+        const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: 'local-test-only' })
+        if (error) throw error
+      }, token)
+    }
     await dismissBgmPrompt(page, choice)
   }
   return { context, page, state, login }
@@ -1947,13 +1972,13 @@ test('annotations survive lost-response retry and mismatched notes cannot confir
     await login()
     const input = await writer(page)
     await input.fill('带批注的分享，必须完整送达。')
-    await addAnnotation(page, 0, 3, '保留这条批注')
+    await addAnnotation(page, 0, 3, '保留这条批注\n'.repeat(1000))
     state.loseResponse = true
     await page.getByRole('button', { name: '分享给对方', exact: true }).click()
     await expect(page.getByRole('button', { name: '确认上次分享' })).toBeVisible({ timeout: 25000 })
     assert.equal(state.inserts, 1)
     const original = structuredClone(state.letters[0].annotations)
-    assert.equal(original[0].note, '保留这条批注')
+    assert.equal(original[0].note, '保留这条批注\n'.repeat(1000))
     await clickMark(page)
     await expect(page.getByRole('dialog', { name: '查看批注' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: '批注内容' })).toHaveCount(0)
@@ -1998,19 +2023,56 @@ test('annotations stay in the draft when the database migration is missing', { t
   } finally { await context.close() }
 })
 
+test('recipient keeps first-line annotations visible when reopening a read multi-page letter', { timeout: 45000 }, async () => {
+  const { context, page, state, login } = await live()
+  try {
+    const content = ['给你看', ...Array.from({ length: 36 }, (_, index) => '花'.repeat(40 + index * 73 % 160)), '', '', '最后一段。'].join('\n')
+    const annotations = [{ id: ME, start: 0, end: 3, quote: '给你看', note: '这是一条要让对方看到的批注' }]
+    state.letters.push({ id: '44444444-4444-4444-4444-444444444444', pair_id: PAIR, sender_id: YOU, status: 'read', stationery: 'cream', content, annotations, images: [], sealed_at: new Date().toISOString() })
+    await login()
+    for (const viewport of [{ width: 1366, height: 900 }, { width: 900, height: 600 }, { width: 1920, height: 1080 }]) {
+      await page.setViewportSize(viewport)
+      await page.getByRole('button', { name: '台历', exact: true }).click()
+      const day = new Date().toLocaleDateString('en-CA')
+      await page.locator(`button[aria-label^="${day}，"]`).click()
+      await page.getByRole('button', { name: /给你看 花/ }).click()
+      await expect(page.locator('.annotation-highlight')).toHaveCount(1)
+      await expectPinkBands(page)
+      await clickMark(page)
+      await expect(page.locator('.annotation-note')).toHaveText(annotations[0].note)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: '下一页', exact: true }).click()
+      await expect(page.locator('.annotation-highlight')).toHaveCount(0)
+      await page.getByRole('button', { name: '上一页', exact: true }).click()
+      await expectPinkBands(page)
+      await clickMark(page)
+      await expect(page.locator('.annotation-note')).toHaveText(annotations[0].note)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: '关闭信纸' }).click()
+    }
+    assert.deepEqual(state.unexpected, [])
+    assert.deepEqual(state.errors, [])
+  } finally { await context.close() }
+})
+
 test('recipient reads annotations without requesting or editing separate annotation data', { timeout: 30000 }, async () => {
   const { context, page, state, login } = await live()
   try {
-    const annotations = [{ id: ME, start: 0, end: 4, quote: '来自对方', note: '收信人看到的说明' }]
+    const annotations = [{ id: ME, start: 0, end: 4, quote: '来自对方', note: '收信人看到的说明\n'.repeat(1000) }]
     state.letters.push({ id: '44444444-4444-4444-4444-444444444444', pair_id: PAIR, sender_id: YOU, status: 'delivered', stationery: 'cream', content: '来自对方的花与风。', annotations, images: [], sealed_at: new Date().toISOString() })
     await login()
     await page.getByRole('button', { name: '台历，1 条未读内容', exact: true }).click()
+    const refreshed = Promise.all([
+      page.waitForResponse((response) => new URL(response.url()).pathname === '/rest/v1/letters' && response.request().method() === 'GET'),
+      page.waitForResponse((response) => new URL(response.url()).pathname === '/rest/v1/reactions' && response.request().method() === 'GET'),
+    ])
     await page.getByRole('button', { name: /来自对方的花与风/ }).click()
+    await refreshed
     await expect(page.locator('.paper-reading')).toHaveText('来自对方的花与风。')
     await expect.poll(() => state.letters[0].status).toBe('read')
     const requests = state.requests.length
     await clickMark(page)
-    await expect(page.locator('.annotation-note')).toHaveText('收信人看到的说明')
+    await expect(page.locator('.annotation-note')).toHaveText('收信人看到的说明\n'.repeat(1000))
     await expect(page.getByRole('button', { name: '保存批注' })).toHaveCount(0)
     await page.keyboard.press('Escape')
     assert.equal(state.requests.length, requests)

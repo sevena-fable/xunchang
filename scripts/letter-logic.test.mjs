@@ -50,11 +50,11 @@ test('annotations count code points and map both selection directions', () => {
   for (let offset = 0; offset <= characterCount(annotatedText); offset++) assert.equal(characterOffset(annotatedText, domOffset(annotatedText, offset)), offset)
 })
 
-test('annotation validation rejects invalid structure, overlap and notes over 100 code points', () => {
-  for (const note of ['v', '🐦'.repeat(100), 'é'.repeat(50)]) assert.doesNotThrow(() => validateAnnotations(annotatedText, [{ ...annotation, note }]))
+test('annotation validation accepts long notes but rejects invalid structure and overlap', () => {
+  for (const note of ['v', '🐦'.repeat(100), '🐦'.repeat(101), 'é'.repeat(5000), '长批注\n'.repeat(10000)]) assert.doesNotThrow(() => validateAnnotations(annotatedText, [{ ...annotation, note }]))
   assert.doesNotThrow(() => validateAnnotations('', []))
   const invalid = [null, {}, [null], [{ ...annotation, id: 'wrong' }], [{ ...annotation, start: -1 }], [{ ...annotation, start: 1.5 }], [{ ...annotation, end: 90 }], [{ ...annotation, end: 1 }], [{ ...annotation, quote: 'wrong' }], [annotation, annotation]]
-  for (const note of ['', ' \n\t\v\f\r\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff', '🐦'.repeat(101), 100, null]) invalid.push([{ ...annotation, note }])
+  for (const note of ['', ' \n\t\v\f\r\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff', 100, null]) invalid.push([{ ...annotation, note }])
   for (const field of ['id', 'start', 'end', 'quote', 'note']) {
     const item = { ...annotation }; delete item[field]; invalid.push([item])
   }
