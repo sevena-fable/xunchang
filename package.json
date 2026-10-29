@@ -1,6 +1,12 @@
 {
-  "name": "yiyu",
+  "name": "xunchang",
   "private": true,
+  "description": "寻常：两扇窗台与一只信鸽的双人通信空间",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sevena-fable/xunchang.git"
+  },
   "version": "0.1.0",
   "type": "module",
   "scripts": {

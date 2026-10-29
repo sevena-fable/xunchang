@@ -1,12 +1,14 @@
-# 一羽 · Double Serenity
+# 寻常
 
 > 治愈系双人通信空间 —— 两个独立窗台 + 一只共同信鸽 + 一套信件回忆系统。
 
 ## 这是什么
 
-「一羽」是一个只属于两个人的私密通信空间。每个人拥有自己的窗台,两人共同领养一只信鸽,信件由它叼着往返于两扇窗之间。没有即时消息的喧嚣,只有低频、温柔、有仪式感的连接。
+「寻常」是一个只属于两个人的私密通信空间。每个人拥有自己的窗台,两人共同领养一只信鸽,信件由它叼着往返于两扇窗之间。没有即时消息的喧嚣,只有低频、温柔、有仪式感的连接。
 
-名字的含义:一根羽毛,一只鸽子——两个人共同拥有的那"一"只,把"共同拥有"藏在"一"字里。
+把寻常的日子，慢慢写给你。
+
+仓库：[sevena-fable/xunchang](https://github.com/sevena-fable/xunchang) · 许可证：[MIT](LICENSE)
 
 ## 文档目录
 
@@ -36,13 +38,34 @@
 - [x] 阶段 4：窗台场景与美术（全屏 16:9 窗景 + 七个物件热区 + 四时光线 + 台灯昼夜）
 - [x] 阶段 5：仪式感打磨（拆信火漆动画、九种程序化音效、四种环境音、鸽子小动作）
 - [x] 阶段 6：图片、回应与日历（信中配图 + 一次性回应 + 台历往来打点）
+- [x] 阶段 7–10：整页信纸、草稿保护、统一面板样式、选区批注与长批注保留
 
 ## 本地怎么跑
 
+需要 Node.js 22 或更新的 LTS 版本。先克隆项目并安装依赖：
+
 ```bash
-npm install
+git clone https://github.com/sevena-fable/xunchang.git
+cd xunchang
+npm ci
+```
+
+复制 `.env.example` 为 `.env.local`，填入自己 Supabase 项目的 URL 和客户端 anon key，完成下方数据库初始化后启动：
+
+```bash
 npm run dev
 ```
+
+Supabase Auth 的 Site URL 和允许跳转地址需包含实际访问地址（本地为 `http://localhost:5173`）。环境变量只填写客户端 anon key，服务端 service role key 不应放进前端。
+
+构建和测试：
+
+```bash
+npm run build
+npm test
+```
+
+测试包含逻辑、数据库权限和浏览器交互；Windows 默认使用已安装的 Microsoft Edge，其他平台可先运行 `npx playwright install chromium`。
 
 - 正式界面：http://localhost:5173/ （需要 `.env.local` 里的 Supabase 配置）
 - **美术预览台**：http://localhost:5173/preview.html
@@ -59,6 +82,11 @@ npm run dev
 | 2 | `supabase/phase2-letters.sql` | letters 表 + 信纸 + RLS |
 | 3 | `supabase/phase3-pigeon.sql` | 信鸽状态机 + summon_requests |
 | 4 | `supabase/phase6-extras.sql` | letters.images 字段、reactions 表、letter-images 存储桶 |
+| 5 | `supabase/phase7-reliability.sql` | 信件、图片与回应的权限和可靠性加固 |
+| 6 | `supabase/migrations/20261024005756_letter_annotations.sql` | 原文选区批注 |
+| 7 | `supabase/migrations/20261029053457_remove_annotation_limit.sql` | 移除批注长度上限 |
+
+已有数据库在升级前应先备份并核对现有策略。`phase7-reliability.sql` 包含旧版图片 URL 的迁移前缀；迁移已有图片时，将其中的 Supabase 项目域名替换为自己的域名。全新数据库没有旧图片，无需替换。
 
 ## 换背景图
 
@@ -66,3 +94,7 @@ npm run dev
 如果以后有了单独画的早晨/黄昏/夜晚原图，只要放进 `public/`，然后在
 `src/lib/scene.js` 里把对应时段的 `image` 换掉、把 `filter` 和 `overlay` 设为 `null`，
 场景就会直接用原图，不再叠滤镜。热区坐标是百分比的，换图不用重新对位（只要构图一致）。
+
+## 开源许可
+
+源码与项目文档采用 [MIT License](LICENSE)。第三方字体及其封装遵循各自许可证，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

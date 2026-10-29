@@ -6,6 +6,8 @@ dist
 
 # 本地环境变量(以后 Supabase 的密钥放这里,绝不能上传)
 .env
+.env.*
+!.env.example
 .env.local
 
 # 系统与编辑器杂项
