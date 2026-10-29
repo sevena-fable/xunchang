@@ -17,9 +17,9 @@ function iso(daysAgo) {
   return date.toISOString()
 }
 const INITIAL = [
-  { id: 'l1', pair_id: pair.id, sender_id: YOU, stationery: 'cream', status: 'delivered', content: '今天路过那家花店，橱窗里摆的还是上次那一束。我站着看了一会儿，想起你说过你喜欢有点旧旧的颜色。', images: [], sealed_at: iso(0), delivered_at: iso(0) },
-  { id: 'l2', pair_id: pair.id, sender_id: ME, stationery: 'kraft', status: 'read', content: '我把窗台收拾了一下，摆了一盆很小的绿色的东西。它好像不太需要人管，这点像我。', images: [], sealed_at: iso(2), delivered_at: iso(2) },
-  { id: 'l3', pair_id: pair.id, sender_id: YOU, stationery: 'night', status: 'delivered', content: '半夜醒了，外面很安静。突然很想让你看看我这边的天。', images: [], sealed_at: iso(40), delivered_at: iso(40) },
+  { id: 'l1', pair_id: pair.id, sender_id: YOU, stationery: 'cream', status: 'delivered', content: '采菊东篱下，悠然见南山。\n\n出处：陶渊明《饮酒·其五》', annotations: [{ id: '33333333-3333-4333-8333-333333333333', start: 6, end: 11, quote: '悠然见南山', note: '读到这里，想把阅读的速度也放慢一点。' }], images: [], sealed_at: iso(0), delivered_at: iso(0) },
+  { id: 'l2', pair_id: pair.id, sender_id: ME, stationery: 'kraft', status: 'read', content: '行到水穷处，坐看云起时。\n\n出处：王维《终南别业》', images: [], sealed_at: iso(2), delivered_at: iso(2) },
+  { id: 'l3', pair_id: pair.id, sender_id: YOU, stationery: 'night', status: 'delivered', content: '小楼一夜听春雨，深巷明朝卖杏花。\n\n出处：陆游《临安春雨初霁》', images: [], sealed_at: iso(40), delivered_at: iso(40) },
   { id: 'l4', pair_id: pair.id, sender_id: ME, stationery: 'cream', status: 'sealed', content: '这段摘录还没分享，先放在这里。', images: [], sealed_at: iso(4) },
 ]
 const resolveImages = async (images) => images.map((file) => URL.createObjectURL(file))
@@ -31,7 +31,7 @@ function Preview() {
   const [boxes, setBoxes] = useState(false)
   const [letters, setLetters] = useState(INITIAL)
   const [profile, setProfile] = useState({ id: ME, nickname: '小羽' })
-  const [reactions, setReactions] = useState({ l2: { emoji: 'heart', note: '这盆我认得，很像你' } })
+  const [reactions, setReactions] = useState({ l2: { emoji: 'heart', note: '这句读起来很安静' } })
   const sent = useRef(new Map())
   const reading = letters.find((letter) => letter.id === readingId)
   const unread = letters.filter((letter) => letter.sender_id !== ME && letter.status === 'delivered')

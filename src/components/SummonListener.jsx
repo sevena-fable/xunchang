@@ -1,5 +1,4 @@
-// 召唤应答 —— 对方摇铃想把鸽子唤回时，这里弹出让你同意/拒绝（规则 3.3）
-// 同意后由发起方那端把鸽子飞回去（状态推导只在一处），这里只负责回复。
+// 历史召唤应答组件，当前 HomePage 未引用。
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '../lib/supabase'

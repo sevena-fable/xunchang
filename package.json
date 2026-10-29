@@ -1,7 +1,7 @@
 {
   "name": "xunchang",
   "private": true,
-  "description": "寻常：两扇窗台与一只信鸽的双人通信空间",
+  "description": "寻常：分享日常读到的文字，附上出处与批注，按日期回看",
   "license": "MIT",
   "repository": {
     "type": "git",

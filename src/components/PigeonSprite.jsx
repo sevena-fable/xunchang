@@ -1,7 +1,4 @@
-// 鸽子精灵 —— 场景里那只活的鸽子
-//   在我窗台：站在窗沿上轻轻起伏，可以点它逗它（规则 3.6）
-//   不在我窗台：不显示（位置本身就是提示，规则 3.1）
-//   来与去：飞入/飞出动画（阶段五）
+// 历史信鸽动画组件，当前 Scene 未引用。
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useAnimation } from 'framer-motion'
 import { PIGEON_PERCH } from '../lib/scene'

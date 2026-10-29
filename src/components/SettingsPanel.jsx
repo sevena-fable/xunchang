@@ -35,7 +35,7 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
         <input aria-label="你的昵称" value={nickname} disabled={busy} maxLength={12} onChange={(event) => setNickname(event.target.value)} className="panel-input mt-2" />
       </label>
       <div className="panel-box my-5 px-4 py-3 text-sm leading-7">
-        <p>与你通信的人是 {partnerNickname || '（对方还没填昵称）'}</p>
+        <p>与你分享文字的人是 {partnerNickname || '（对方还没填昵称）'}</p>
         <p className="text-xs text-[var(--panel-muted)]">邀请码 <span className="tracking-widest text-[var(--panel-ink)]">{pair.invite_code}</span></p>
         <p className="flex items-center justify-between">背景音乐
           <button type="button" onClick={toggleBgm} aria-label={bgmPlaying ? '静音背景音乐' : '播放背景音乐'} aria-pressed={bgmPlaying} className="rounded-lg p-1.5 text-[var(--panel-muted)] hover:bg-[var(--panel-soft)] hover:text-[var(--panel-ink)]">

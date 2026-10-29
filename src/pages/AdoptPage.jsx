@@ -1,4 +1,4 @@
-// 领养页 —— 配对成功后，共同迎接一只信鸽
+// 历史领养页面，当前 App 的配对流程不使用。
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 

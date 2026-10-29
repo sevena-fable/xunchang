@@ -3,7 +3,7 @@
 @import "@fontsource/noto-serif-sc/400.css";
 @import "lxgw-wenkai-webfont/lxgwwenkai-regular.css";
 
-/* 全局字体:衬线体更有书信的温度 */
+/* 全局字体：衬线体用于阅读正文，文楷用于纸页。 */
 body {
   font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
 }

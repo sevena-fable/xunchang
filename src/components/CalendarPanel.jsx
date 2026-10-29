@@ -1,5 +1,4 @@
-// 台历 —— 有通信的日子会自动落下一枚小信封（规则 7）
-// 纯自动沉淀：你什么都不用记，写过信的日子自己会留在这本台历上。
+// 台历 —— 分享过文字的日子自动标记小红点，按日期回看摘录。
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { dayKey } from '../lib/letterFormat'
@@ -14,7 +13,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
   const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() })
   const [picked, setPicked] = useState(null)
 
-  // 把所有信按"日子"归堆：{ '2026-07-31': [信, 信] }
+  // 按内容创建日期分组，使用浏览器所在时区。
   const byDay = useMemo(() => {
     const map = {}
     history.forEach((l) => {
@@ -50,7 +49,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
       open={open}
       onClose={() => { setPicked(null); onClose() }}
       title="台 历"
-      subtitle={monthCount ? '分享过的日常，都在这里' : '这个月还很安静'}
+      subtitle={monthCount ? '分享过的文字，都在这里' : '这个月还很安静'}
       width="max-w-md"
     >
       {[[unread, '还没看过'], [mySealed, '还未分享']].map(([items, label]) => items.length > 0 && (
@@ -125,7 +124,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
         })}
       </div>
 
-      {/* 点开某一天，看那天的信 */}
+      {/* 点开某一天，看那天分享的文字 */}
       <AnimatePresence mode="wait">
         {picked && (
           <motion.div

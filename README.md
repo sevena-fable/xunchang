@@ -1,48 +1,32 @@
 # 寻常
 
-> 治愈系双人通信空间 —— 两个独立窗台 + 一只共同信鸽 + 一套信件回忆系统。
+> 读到喜欢的文字，分享给你。
 
-## 这是什么
+「寻常」是一个分享日常阅读中遇到的文字的网站。书里的一段话、诗中的几行、文章里让你停下来的句子，都可以摘录下来，附上出处和自己的批注，分享给对方。
 
-「寻常」是一个只属于两个人的私密通信空间。每个人拥有自己的窗台,两人共同领养一只信鸽,信件由它叼着往返于两扇窗之间。没有即时消息的喧嚣,只有低频、温柔、有仪式感的连接。
-
-把寻常的日子，慢慢写给你。
+文字在纸页上展开，读过的内容按日期留在台历里，方便日后再翻看。
 
 仓库：[sevena-fable/xunchang](https://github.com/sevena-fable/xunchang) · 许可证：[MIT](LICENSE)
 
-## 文档目录
+![寻常的窗边阅读桌面](public/bg-main.jpg)
 
-| 文档 | 内容 |
-|------|------|
-| [01-产品概览](docs/01-产品概览.md) | 定位、世界观、核心理念、命名 |
-| [02-功能规则](docs/02-功能规则.md) | 信鸽状态机、召唤/守信规则、信件系统、回应、日历、窗台场景 |
-| [03-MVP边界](docs/03-MVP边界.md) | 第一版做什么、不做什么、待定细节 |
-| [04-技术方案](docs/04-技术方案.md) | 技术栈、架构、数据库设计 |
-| [05-开发路线图](docs/05-开发路线图.md) | 分阶段开发计划与学习地图 |
-| [06-阶段4-6验收清单](docs/06-阶段4-6验收清单.md) | 窗台场景/仪式感/图片回应日历的逐项验收步骤 |
+## 现在可以做什么
 
-## 技术栈一览
+- **分享文字**：从桌面上的纸笔进入「给你看看」，输入或粘贴读到的内容，保留段落、空行和标点。
+- **附上出处**：填写作品与作者、链接或页码，将出处插入正文末尾；之后仍可直接编辑。
+- **留下批注**：分享前选中原文并右键，为某一句添加想法。批注随正文一起分享，阅读时可点开查看。
+- **添加照片**：每条内容最多附 3 张照片，每张不超过 6MB，支持 JPG、PNG、WebP 和 GIF。
+- **阅读与回应**：对方打开后可翻页阅读，留下一个表情或 20 字以内的短评；每条内容只能回应一次。
+- **按日期回看**：台历标记分享过内容的日子，也集中列出未读内容和旧版留存的未分享内容。
+- **保存草稿**：正文、批注和照片暂存在当前浏览器，关闭面板后可继续编辑；多窗口同时打开时会保护正在编辑的草稿。
 
-- **前端**:React + Vite + Tailwind CSS + Framer Motion
-- **后端**:Supabase(Auth / PostgreSQL / Storage / Realtime)
-- **部署**:Vercel
-- **平台**:电脑优先(横屏构图),界面默认中文
+当前版本通过邮箱账号和邀请码建立两人的分享空间，内容在配对双方之间可见。主界面是固定的窗边阅读桌面，设置中可以修改昵称、开关背景音乐。
 
-## 当前状态
+当前以电脑浏览器为主。纸页编辑与阅读需要至少 900 × 600 的浏览器视口，窗口过小时会提示放大或全屏。
 
-- [x] 产品设计定稿（2026-07-28）
-- [x] 阶段 0：环境搭建与部署空壳（已上线：https://chat-2-ashen.vercel.app ）
-- [x] 阶段 1：账号、配对与领养（邮箱登录 + 邀请码配对 + 共同领养命名）
-- [x] 阶段 2：信件核心流程（写信/选信纸/寄出/读信 + Realtime 实时送达）
-- [x] 阶段 3：信鸽状态机（摇铃召唤/在线许可/离线直召 + 守信规则 + 惰性溜达）
-- [x] 阶段 4：窗台场景与美术（全屏 16:9 窗景 + 七个物件热区 + 四时光线 + 台灯昼夜）
-- [x] 阶段 5：仪式感打磨（拆信火漆动画、九种程序化音效、四种环境音、鸽子小动作）
-- [x] 阶段 6：图片、回应与日历（信中配图 + 一次性回应 + 台历往来打点）
-- [x] 阶段 7–10：整页信纸、草稿保护、统一面板样式、选区批注与长批注保留
+## 本地运行
 
-## 本地怎么跑
-
-需要 Node.js 22 或更新的 LTS 版本。先克隆项目并安装依赖：
+需要 Node.js 22 或更新的 LTS 版本。
 
 ```bash
 git clone https://github.com/sevena-fable/xunchang.git
@@ -50,50 +34,74 @@ cd xunchang
 npm ci
 ```
 
-复制 `.env.example` 为 `.env.local`，填入自己 Supabase 项目的 URL 和客户端 anon key，完成下方数据库初始化后启动：
+将 `.env.example` 复制为 `.env.local`，填入自己 Supabase 项目的 URL 和客户端 anon key，并按下方顺序初始化数据库。
 
 ```bash
 npm run dev
 ```
 
-Supabase Auth 的 Site URL 和允许跳转地址需包含实际访问地址（本地为 `http://localhost:5173`）。环境变量只填写客户端 anon key，服务端 service role key 不应放进前端。
+- 正式页面：[http://localhost:5173/](http://localhost:5173/)，需要 Supabase 配置。
+- 本地预览：[http://localhost:5173/preview.html](http://localhost:5173/preview.html)，使用演示摘录，可预览分享、出处、批注、照片、阅读、台历和设置，无需连接数据库。
 
-构建和测试：
+Supabase Auth 的 Site URL 和允许跳转地址需包含实际访问地址；本地为 `http://localhost:5173`。前端环境变量使用客户端 anon key，服务端 service role key 应留在服务端。
+
+## 数据库初始化
+
+在 Supabase SQL Editor 中按顺序执行，每个脚本执行一次：
+
+| 顺序 | 脚本 | 用途 |
+|------|------|------|
+| 1 | `supabase/phase1-tables.sql` | 用户资料和配对空间；包含历史版本的兼容表 |
+| 2 | `supabase/phase2-letters.sql` | 分享内容的基础表与权限 |
+| 3 | `supabase/phase6-extras.sql` | 照片字段、回应表与图片存储桶 |
+| 4 | `supabase/phase7-reliability.sql` | 当前内容权限、私有图片存储、配对及分享状态操作 |
+| 5 | `supabase/migrations/20261024005756_letter_annotations.sql` | 原文选区批注 |
+| 6 | `supabase/migrations/20261029053457_remove_annotation_limit.sql` | 取消旧版批注长度上限 |
+
+`supabase/phase3-pigeon.sql` 只补充旧信鸽模块的结构，当前阅读分享流程无需执行。
+
+请完整执行上表步骤后再使用正式页面。已有数据库升级前应先备份并核对现有结构和策略。`phase7-reliability.sql` 含有旧图片 URL 的迁移前缀，迁移已有图片时需替换为自己的 Supabase 项目域名；全新数据库没有旧图片，无需替换。
+
+数据库的 `letters`、`letter-images` 以及部分组件文件名沿用了历史命名，当前承载的是分享内容与附件。相关字段、状态和迁移的对应关系见[技术方案](docs/04-技术方案.md)。仓库保留的旧信鸽模块未接入当前页面。
+
+## 构建与验证
 
 ```bash
 npm run build
 npm test
 ```
 
-测试包含逻辑、数据库权限和浏览器交互；Windows 默认使用已安装的 Microsoft Edge，其他平台可先运行 `npx playwright install chromium`。
+现有测试覆盖文字排版、草稿、出处、批注、照片、分享、回应和数据库权限。浏览器测试在 Windows 上默认使用已安装的 Microsoft Edge；其他平台可先运行 `npx playwright install chromium`。
 
-- 正式界面：http://localhost:5173/ （需要 `.env.local` 里的 Supabase 配置）
-- **美术预览台**：http://localhost:5173/preview.html
-  不连数据库，专门用来看画面。底部控制条可以切换：早晨/白天/黄昏/夜晚、鸽子在不在、
-  守信状态、热区红框、以及逐个打开六个面板和拆信动画。改完样式在这里看最快。
+## 技术与目录
 
-## 数据库脚本执行顺序
+- 前端：React、Vite、Tailwind CSS、Framer Motion。
+- 后端：Supabase Auth、PostgreSQL、Storage、Realtime。
+- 字体：Noto Serif SC、霞鹜文楷；音频使用浏览器原生能力。
+- 部署：Vercel。
 
-在 Supabase 控制台 → SQL Editor 里按顺序执行（每个脚本只需跑一次）：
+| 目录或文件 | 内容 |
+|------------|------|
+| `src/pages/` | 登录、配对、阅读桌面 |
+| `src/components/` | 纸页、分享、阅读、出处、批注、台历和设置 |
+| `src/lib/` | 内容读写、排版、草稿、附件和场景配置 |
+| `src/preview.jsx` | 无后端的本地演示 |
+| `public/` | 背景、纸张、图标、音乐与字体许可文件 |
+| `supabase/` | 数据库初始化与迁移脚本 |
+| `scripts/` | 现有测试和素材处理脚本 |
 
-| 顺序 | 脚本 | 建立了什么 |
-|------|------|-----------|
-| 1 | `supabase/phase1-tables.sql` | profiles / pairs / 邀请码 / 领养信鸽 |
-| 2 | `supabase/phase2-letters.sql` | letters 表 + 信纸 + RLS |
-| 3 | `supabase/phase3-pigeon.sql` | 信鸽状态机 + summon_requests |
-| 4 | `supabase/phase6-extras.sql` | letters.images 字段、reactions 表、letter-images 存储桶 |
-| 5 | `supabase/phase7-reliability.sql` | 信件、图片与回应的权限和可靠性加固 |
-| 6 | `supabase/migrations/20261024005756_letter_annotations.sql` | 原文选区批注 |
-| 7 | `supabase/migrations/20261029053457_remove_annotation_limit.sql` | 移除批注长度上限 |
+当前背景为 `public/bg-main.jpg`。更换构图时，在 `src/lib/scene.js` 中调整背景比例和纸笔、台历两个热区的坐标，可通过预览工具的「热区」按钮检查。
 
-已有数据库在升级前应先备份并核对现有策略。`phase7-reliability.sql` 包含旧版图片 URL 的迁移前缀；迁移已有图片时，将其中的 Supabase 项目域名替换为自己的域名。全新数据库没有旧图片，无需替换。
+## 项目文档
 
-## 换背景图
-
-场景的四个时段目前共用 `public/bg-window-day.jpg`（正午母版），靠 CSS 滤镜调出早晚。
-如果以后有了单独画的早晨/黄昏/夜晚原图，只要放进 `public/`，然后在
-`src/lib/scene.js` 里把对应时段的 `image` 换掉、把 `filter` 和 `overlay` 设为 `null`，
-场景就会直接用原图，不再叠滤镜。热区坐标是百分比的，换图不用重新对位（只要构图一致）。
+| 文档 | 内容 |
+|------|------|
+| [产品概览](docs/01-产品概览.md) | 阅读分享的定位、体验和文案约定 |
+| [功能规则](docs/02-功能规则.md) | 分享、出处、批注、照片、阅读、回应和台历 |
+| [MVP 边界](docs/03-MVP边界.md) | 当前范围与尚未提供的能力 |
+| [技术方案](docs/04-技术方案.md) | 实际结构、数据语义、权限和历史兼容说明 |
+| [维护方向](docs/05-开发路线图.md) | 后续工作的取舍依据 |
+| [使用与验收](docs/06-使用与验收.md) | 本地体验步骤与验证清单 |
 
 ## 开源许可
 
