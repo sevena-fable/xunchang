@@ -1388,7 +1388,7 @@ test('preview restores photo draft, sends once, reads and responds without backe
     for (const label of ['下次聊聊', '喜欢', '点赞', '狗头']) await expect(page.getByRole('dialog', { name: '你的回应', exact: true }).getByText(label, { exact: true })).toHaveCount(0)
     await page.getByRole('button', { name: '喜欢', exact: true }).click()
     await expect(page.getByRole('button', { name: '喜欢', exact: true })).toHaveAttribute('aria-pressed', 'true')
-    await page.getByLabel('回应短评').fill('收到了')
+    await page.getByLabel('回应内容').fill('收到了')
     await page.getByRole('button', { name: '送出回应', exact: true }).click()
     await expectReaction(page, '喜欢', '收到了')
     await page.keyboard.press('Escape')
@@ -1732,7 +1732,7 @@ async function live() {
   const context = await browser.newContext({ viewport: { width: 1366, height: 900 } })
   const page = await context.newPage()
   const user = { id: ME, aud: 'authenticated', role: 'authenticated', email: 'test@example.com', user_metadata: { nickname: '测试' } }
-  const state = { letters: [], reactions: [], reactionReplies: 0, requests: [], sockets: [], errors: [], unexpected: [], inserts: 0, reject: false, loseResponse: false, obscure: false, profileError: false }
+  const state = { letters: [], reactions: [], annotationReplies: [], reactionReplies: 0, requests: [], sockets: [], errors: [], unexpected: [], inserts: 0, reject: false, loseResponse: false, obscure: false, profileError: false }
   page.on('pageerror', (error) => state.errors.push(error.message))
   await context.routeWebSocket('**', (socket) => socket.onMessage((message) => state.sockets.push(String(message))))
   await page.route('**/*.supabase.co/**', async (route) => {
@@ -1753,7 +1753,25 @@ async function live() {
       return reply([{ id: url.searchParams.get('id')?.slice(3), nickname: '测试' }])
     }
     if (url.pathname === '/rest/v1/pairs') return reply([{ id: PAIR, user_a: ME, user_b: YOU, status: 'paired', invite_code: 'TEST1234' }])
+    if (url.pathname === '/rest/v1/annotation_replies') {
+      if (state.replyError) return reply({ message: '批注回复读取失败', code: 'XX000' }, 500)
+      if (method === 'POST') {
+        state.replyInserts = (state.replyInserts || 0) + 1
+        if (state.rejectReply) return reply({ message: '回复写入被拒绝', code: '42501' }, 403)
+        const saved = { ...request.postDataJSON(), created_at: new Date().toISOString() }
+        state.annotationReplies.push(saved)
+        if (state.loseReplyResponse) return route.abort('failed')
+        return reply(saved, 201)
+      }
+      const id = url.searchParams.get('id')?.slice(3)
+      return reply(id ? state.annotationReplies.filter((item) => item.id === id) : state.annotationReplies)
+    }
     if (url.pathname === '/rest/v1/reactions') {
+      if (method === 'POST') {
+        state.reactionInserts = (state.reactionInserts || 0) + 1
+        state.reactions.push({ ...request.postDataJSON(), created_at: new Date().toISOString() })
+        return reply(null, 201)
+      }
       const response = state.reactionError ? { message: '回应读取暂时失败', code: 'XX000' } : state.reactions
       const status = state.reactionError ? 500 : 200
       if (state.reactionGate) await state.reactionGate
@@ -2789,7 +2807,7 @@ for (const viewport of [{ width: 1366, height: 900 }, { width: 320, height: 640 
       await checkBotanicalPanel(page, `reaction-${viewport.width}`)
       const reaction = page.getByRole('dialog', { name: '你的回应', exact: true })
       await reaction.getByRole('button', { name: '喜欢', exact: true }).click()
-      await reaction.getByLabel('回应短评').fill('收到啦')
+      await reaction.getByLabel('回应内容').fill('收到啦')
       await reaction.getByRole('button', { name: '送出回应', exact: true }).click()
       await expect(reaction.getByText('「收到啦」')).toBeVisible()
       await checkBotanicalPanel(page, `reaction-saved-${viewport.width}`)
@@ -2842,6 +2860,158 @@ test('botanical panels cover waiting, music, recovery and loading errors', { tim
     await page.goto(BASE)
     await expect(page.getByRole('alert')).toBeVisible()
     await checkBotanicalPanel(page, 'profile-error')
+    assert.deepEqual(state.unexpected, [])
+    assert.deepEqual(state.errors, [])
+  } finally { await context.close() }
+})
+
+
+async function selectReply(page, start, end) {
+  const point = await page.locator('.paper-reading').evaluate(async (root, { start, end }) => {
+    const { selectPaperText, paperTextRects } = await import('/src/lib/paper.js')
+    selectPaperText(root, start, end)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    const box = root.closest('.paper-window').getBoundingClientRect()
+    const rect = paperTextRects(root, Math.min(start, end), Math.max(start, end), false).find((rect) => rect.top >= box.top && rect.bottom <= box.bottom)
+    return { x: rect.left + Math.min(5, rect.width / 2), y: rect.top + rect.height / 2 }
+  }, { start, end })
+  await page.mouse.click(point.x, point.y, { button: 'right' })
+  const panel = page.getByRole('dialog', { name: '批注回复', exact: true })
+  await expect(panel.getByRole('textbox', { name: '批注回复内容' })).toBeFocused()
+  return panel
+}
+
+test('annotation replies use blue and lavender overlaps, persist and are visible from both viewpoints', { timeout: 45000 }, async () => {
+  const { context, page, backend, errors } = await preview()
+  try {
+    await page.getByRole('button', { name: '查看内容', exact: true }).click()
+    const text = await page.locator('.paper-reading').textContent()
+    for (const [tone, color] of [['author', 'rgb(247, 214, 212)'], ['reply', 'rgb(214, 234, 245)'], ['overlap', 'rgb(227, 221, 241)']]) {
+      await expect(page.locator(`.annotation-highlight[data-tone="${tone}"]`).first()).toHaveCSS('background-color', color)
+    }
+    const panel = await selectReply(page, 0, 9)
+    await expect(panel.locator('h1,h2,h3,header,blockquote,label')).toHaveCount(0)
+    await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(244, 249, 252)')
+    await expect(panel.locator('.annotation-card')).toHaveCSS('border-radius', '8px')
+    const input = panel.getByRole('textbox', { name: '批注回复内容' })
+    await input.fill('短回复')
+    assert.ok((await panel.locator('.annotation-card').boundingBox()).height < 90)
+    await expect(input).toHaveCSS('resize', 'none')
+    const note = '这是读到这里时的想法。'.repeat(15)
+    await panel.getByRole('textbox', { name: '批注回复内容' }).fill(note)
+    await panel.getByRole('button', { name: '发送回复', exact: true }).dblclick()
+    await expect(panel).toBeHidden()
+    await expect(page.locator('.paper-reading')).toHaveText(text)
+    assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('xunchang-preview-annotation-replies-v1')).length), 2)
+    await page.getByRole('button', { name: '关闭信纸' }).click()
+    await page.reload()
+    await page.getByRole('button', { name: '切换为分享者', exact: true }).click()
+    await page.getByRole('button', { name: '查看内容', exact: true }).click()
+    await expect(page.getByRole('button', { name: '批注回复', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: '批注回复：采菊东篱下，悠然见', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByRole('dialog', { name: '查看批注与回复' })).toBeVisible()
+    await expect(page.locator('.annotation-note')).toHaveText(note)
+    await page.getByRole('button', { name: '查看分享者批注', exact: true }).click()
+    await expect(page.locator('.annotation-note')).toHaveText('读到这里，想把阅读的速度也放慢一点。')
+    await expect(page.getByRole('textbox', { name: '批注回复内容' })).toHaveCount(0)
+    assert.deepEqual(backend, [])
+    assert.deepEqual(errors, [])
+  } finally { await context.close() }
+})
+
+test('annotation replies cancel cleanly and retain their text after rejected or uncertain sending', { timeout: 45000 }, async () => {
+  const { context, page, state, login } = await live()
+  try {
+    const letter = { id: '44444444-4444-4444-4444-444444444444', pair_id: PAIR, sender_id: YOU, status: 'delivered', stationery: 'cream', content: '甲🐦乙丙丁戊己庚。', annotations: [{ id: ME, start: 1, end: 5, quote: '🐦乙丙丁', note: '原来的批注' }], images: [], sealed_at: new Date().toISOString() }
+    state.letters.push(letter)
+    await login()
+    await page.getByRole('button', { name: '台历，1 条未读内容', exact: true }).click()
+    await page.getByRole('button', { name: /甲🐦乙丙/ }).click()
+    let panel = await selectReply(page, 1, 5)
+    await panel.getByRole('textbox', { name: '批注回复内容' }).fill('取消的内容')
+    await panel.getByRole('button', { name: '关闭批注', exact: true }).click()
+    await expect(page.locator('.annotation-highlight[data-tone="reply"]')).toHaveCount(0)
+    await expect(page.locator('.annotation-highlight[data-tone="overlap"]')).toHaveCount(0)
+    panel = await selectReply(page, 1, 5)
+    await panel.getByRole('textbox', { name: '批注回复内容' }).fill('保留的回复')
+    state.rejectReply = true
+    await panel.getByRole('button', { name: '发送回复', exact: true }).click()
+    await expect(panel.getByRole('alert')).toBeVisible()
+    await expect(panel.getByRole('textbox', { name: '批注回复内容' })).toHaveValue('保留的回复')
+    state.rejectReply = false
+    state.loseReplyResponse = true
+    await panel.getByRole('button', { name: '发送回复', exact: true }).dblclick()
+    await expect(panel).toBeHidden()
+    assert.equal(state.annotationReplies.length, 1)
+    assert.equal(state.replyInserts, 2)
+    assert.equal(state.annotationReplies[0].quote, '🐦乙丙')
+    assert.equal(state.annotationReplies[0].start, 1)
+    assert.equal(state.annotationReplies[0].end, 4)
+    assert.deepEqual(letter.annotations, [{ id: ME, start: 1, end: 5, quote: '🐦乙丙丁', note: '原来的批注' }])
+    assert.deepEqual(state.unexpected, [])
+    assert.deepEqual(state.errors, [])
+  } finally { await context.close() }
+})
+
+
+test('annotation replies preserve cross-page ranges and retry loading without hiding the original', { timeout: 45000 }, async () => {
+  const { context, page, state, login } = await live()
+  try {
+    await page.setViewportSize({ width: 900, height: 600 })
+    const content = '跨页批注回复。\n' + '读到值得停留的文字，可以慢慢记下自己的想法。'.repeat(110)
+    const annotations = [{ id: ME, start: 0, end: 70, quote: Array.from(content).slice(0, 70).join(''), note: '分享者原来的理解' }]
+    state.letters.push({ id: '44444444-4444-4444-4444-444444444444', pair_id: PAIR, sender_id: YOU, status: 'delivered', stationery: 'cream', content, annotations, images: [], sealed_at: new Date().toISOString() })
+    state.replyError = true
+    await login()
+    await page.getByRole('button', { name: '台历，1 条未读内容', exact: true }).click()
+    await page.getByRole('button', { name: /跨页批注回复/ }).click()
+    await expect(page.locator('.paper-reading')).toHaveText(content)
+    await expect(page.getByRole('button', { name: '重试批注回复', exact: true })).toBeVisible()
+    state.replyError = false
+    await page.getByRole('button', { name: '重试批注回复', exact: true }).click()
+    await expect(page.getByRole('button', { name: '重试批注回复', exact: true })).toHaveCount(0)
+    await page.getByRole('button', { name: '下一页', exact: true }).click()
+    const number = await page.getByLabel('信纸页码').textContent()
+    const panel = await selectReply(page, 20, content.length - 20)
+    await panel.getByRole('textbox', { name: '批注回复内容' }).fill('跨页的回复仍对应同一段原文。')
+    await panel.getByRole('button', { name: '发送回复', exact: true }).click()
+    await expect(panel).toBeHidden()
+    await expect(page.getByLabel('信纸页码')).toHaveText(number)
+    assert.equal(state.annotationReplies[0].quote, content.slice(20, -20))
+    await expect(page.locator('.annotation-highlight[data-tone="reply"]').first()).toBeVisible()
+    await page.getByRole('button', { name: '上一页', exact: true }).click()
+    await expect(page.locator('.annotation-highlight[data-tone="overlap"]').first()).toBeVisible()
+    await expect(page.locator('.paper-reading')).toHaveText(content)
+    assert.deepEqual(state.unexpected, [])
+    assert.deepEqual(state.errors, [])
+  } finally { await context.close() }
+})
+
+
+test('ordinary reactions keep long multiline text without a twenty-character limit', { timeout: 30000 }, async () => {
+  const { context, page, state, login } = await live()
+  try {
+    const id = '44444444-4444-4444-4444-444444444444'
+    state.letters.push({ id, pair_id: PAIR, sender_id: YOU, status: 'delivered', stationery: 'cream', content: '读到这里，可以慢慢回应。', images: [], sealed_at: new Date().toISOString() })
+    await login()
+    await page.getByRole('button', { name: '台历，1 条未读内容', exact: true }).click()
+    await page.getByRole('button', { name: /读到这里，可以慢慢回应/ }).click()
+    await page.getByRole('button', { name: '留个回应', exact: true }).click()
+    const panel = page.getByRole('dialog', { name: '你的回应', exact: true })
+    const note = '这是超过二十字的普通回应，可以完整地说出读到这段文字的想法。\n\n' + '也保留新的段落和表情🐦。'.repeat(40)
+    const input = panel.getByRole('textbox', { name: '回应内容', exact: true })
+    await input.fill(note)
+    assert.equal(await input.evaluate((element) => element.tagName), 'TEXTAREA')
+    await expect(panel.locator('[maxlength]')).toHaveCount(0)
+    await expect(panel.getByText(/20 字以内|^[0-9]+\/20$/)).toHaveCount(0)
+    await panel.getByRole('button', { name: '送出回应', exact: true }).dblclick()
+    await expect(panel.getByText(`「${note}」`, { exact: true })).toBeVisible()
+    assert.equal(state.reactions[0].note, note)
+    assert.equal(state.reactionInserts, 1)
+    await panel.getByRole('button', { name: '关闭', exact: true }).click()
+    await page.getByRole('button', { name: '查看回应', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '你的回应', exact: true }).getByText(`「${note}」`, { exact: true })).toBeVisible()
     assert.deepEqual(state.unexpected, [])
     assert.deepEqual(state.errors, [])
   } finally { await context.close() }

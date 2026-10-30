@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import Modal from './Modal'
 
-export default function AnnotationPopover({ annotation, anchor, editable, onSave, onDelete, onClose }) {
+export default function AnnotationPopover({ annotation, anchor, editable, onSave, onDelete, onClose, tone = 'author', label, contentLabel = '批注内容', saveLabel = '保存批注', busy = false, locked = false, message = '', onReply, navigation = [] }) {
   const card = useRef(null)
   const writing = useRef(null)
   const composing = useRef(false)
@@ -37,7 +37,7 @@ export default function AnnotationPopover({ annotation, anchor, editable, onSave
     window.addEventListener('resize', fit)
     document.fonts.addEventListener('loadingdone', fit)
     return () => { window.removeEventListener('resize', fit); document.fonts.removeEventListener('loadingdone', fit) }
-  }, [note, editable])
+  }, [note, editable, message])
 
   useLayoutEffect(() => {
     const place = () => {
@@ -56,28 +56,35 @@ export default function AnnotationPopover({ annotation, anchor, editable, onSave
   }, [anchor])
 
   return (
-    <Modal label={editable ? '编辑批注' : '查看批注'} className="annotation-modal" onClose={onClose}>
-      <section ref={card} className="annotation-card" style={position} onKeyDown={(event) => event.stopPropagation()}>
-        <button type="button" onClick={onClose} aria-label="关闭批注" className="annotation-close">
+    <Modal label={label || (editable ? '编辑批注' : '查看批注')} className="annotation-modal" onClose={onClose}>
+      <section ref={card} className={`annotation-card annotation-card-${tone}`} style={position} aria-busy={busy} onKeyDown={(event) => event.stopPropagation()}>
+        <button type="button" onClick={onClose} disabled={busy} aria-label="关闭批注" className="annotation-close">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
         </button>
         {editable ? (
-          <form onSubmit={(event) => { event.preventDefault(); if (!composing.current && note.trim()) onSave(note) }}>
-            <textarea ref={writing} className="annotation-lines thin-scroll" aria-label="批注内容" value={note}
+          <form onSubmit={(event) => { event.preventDefault(); if (!busy && !composing.current && note.trim()) onSave(note) }}>
+            <textarea ref={writing} className="annotation-lines thin-scroll" aria-label={contentLabel} value={note} disabled={busy || locked}
               onChange={(event) => setNote(event.currentTarget.value)}
               onCompositionStart={() => { composing.current = true }}
               onCompositionEnd={(event) => { composing.current = false; setNote(event.currentTarget.value) }}
               rows={1} spellCheck={false} />
             <div className="annotation-actions">
-              {annotation.id && <button type="button" onClick={onDelete} className="annotation-delete" aria-label="删除批注">
+              {annotation.id && onDelete && <button type="button" disabled={busy} onClick={onDelete} className="annotation-delete" aria-label="删除批注">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7" /></svg>
               </button>}
-              <button type="submit" className="annotation-save" aria-label="保存批注" disabled={!note.trim()}>
+              <button type="submit" className="annotation-save" aria-label={saveLabel} disabled={busy || !note.trim()}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
               </button>
             </div>
           </form>
-        ) : <p ref={writing} className="annotation-lines annotation-note thin-scroll" tabIndex={0} aria-label="批注内容">{annotation.note}</p>}
+        ) : <>
+          <p ref={writing} className="annotation-lines annotation-note thin-scroll" tabIndex={0} aria-label={contentLabel}>{annotation.note}</p>
+          {onReply && <div className="annotation-actions"><button type="button" onClick={onReply} aria-label="也在这里回复" title="也在这里回复"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 16-1 4 4-1L20 7l-3-3L5 16Zm9-9 3 3" /></svg></button></div>}
+        </>}
+        {navigation.length > 1 && <nav className={`annotation-navigation ${onReply ? 'annotation-navigation-with-action' : ''}`} aria-label="切换批注与回复">
+          {navigation.map((item) => <button key={item.id} type="button" aria-label={item.label} title={item.label} aria-pressed={item.active} onClick={item.onSelect}><i className={`annotation-dot-${item.tone}`} aria-hidden="true" /></button>)}
+        </nav>}
+        {message && <p className="annotation-reply-error" role="alert">{message}</p>}
       </section>
     </Modal>
   )

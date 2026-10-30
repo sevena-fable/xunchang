@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getStationery } from '../lib/stationery'
 import { REACTIONS, reactionOf } from '../lib/letterFormat'
 import PaperSheet, { PaperWorkspace, usePaperViewport } from './PaperSheet'
@@ -6,7 +6,9 @@ import Modal from './Modal'
 import Panel, { PrimaryButton } from './Panel'
 import { sfxReact } from '../lib/sfx'
 
-export default function ReadLetter({ letter, userId, reaction, reactionLoading = false, reactionError = '', onRetryReactions, onClose, onChanged, onMarkRead, onDeliver, onReact, resolveImages }) {
+const NO_REPLIES = []
+
+export default function ReadLetter({ letter, userId, replies = NO_REPLIES, repliesLoading = false, repliesError = '', onRetryReplies, onReply, reaction, reactionLoading = false, reactionError = '', onRetryReactions, onClose, onChanged, onMarkRead, onDeliver, onReact, resolveImages }) {
   const style = getStationery(letter.stationery)
   const mine = letter.sender_id === userId
   const sealed = mine && ['sealed', 'delivering'].includes(letter.status)
@@ -24,6 +26,10 @@ export default function ReadLetter({ letter, userId, reaction, reactionLoading =
   const [showReaction, setShowReaction] = useState(false)
   const [confirmDelivery, setConfirmDelivery] = useState(false)
   const [delivered, setDelivered] = useState(false)
+  const [sentReplies, setSentReplies] = useState([])
+  const [replyHint, setReplyHint] = useState(false)
+  const allReplies = useMemo(() => [...new Map([...replies, ...sentReplies].map((item) => [item.id, item])).values()], [replies, sentReplies])
+  const canReply = !mine && ['delivered', 'read'].includes(letter.status) && typeof onReply === 'function'
   const alive = useRef(false)
   const lock = useRef(false)
   const readRequested = useRef(null)
@@ -72,25 +78,35 @@ export default function ReadLetter({ letter, userId, reaction, reactionLoading =
     finally { lock.current = false; if (alive.current) setBusy(false) }
   }
 
+  async function replyToText(reply) {
+    const saved = await onReply(reply)
+    if (alive.current) { setSentReplies((items) => [...items.filter((item) => item.id !== saved.id), saved]); setReplyHint(false); onChanged() }
+    return saved
+  }
+
   const close = () => { if (!lock.current) onClose() }
   const date = new Date(letter.sealed_at).toLocaleString('zh-CN', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
   const header = `${mine ? sealed && !delivered ? '还未分享的内容' : '你分享的内容' : '对方分享的内容'} · ${date}`
   return (
     <Modal onClose={close} label="查看内容" closeOnBackdrop={false}>
       <PaperWorkspace fitsViewport={fitsViewport} onClose={close} disabled={busy}>
-        <PaperSheet style={style} content={letter.content} annotations={letter.annotations} header={header} onClose={close} disabled={busy} />
+        <PaperSheet style={style} content={letter.content} annotations={letter.annotations} replies={allReplies} onReply={canReply ? replyToText : undefined} header={header} onClose={close} disabled={busy} />
         <div className="letter-tools">
           <div className="attachment-tray">
             {images.map((url, index) => <button type="button" key={url} aria-label={`查看照片 ${index + 1}`} onClick={() => setZoom(url)} style={{ padding: 0, border: 0 }}><img src={url} alt={`分享的照片 ${index + 1}`} /></button>)}
             {imageError && <button type="button" onClick={() => setImageRetry((value) => value + 1)}>重新读取照片</button>}
           </div>
+          <div className="flex items-center gap-2">
+          {canReply && <button type="button" onClick={() => setReplyHint((value) => !value)} aria-pressed={replyHint}>批注回复</button>}
           {sealed && !delivered ? (
             <button type="button" disabled={busy} onClick={() => setConfirmDelivery(true)}>分享给对方</button>
           ) : (
             <button type="button" onClick={() => setShowReaction(true)}>{reaction ? '查看回应' : mine ? '回应' : '留个回应'}</button>
           )}
+          </div>
         </div>
-        <p className="letter-status" role="status">{message || imageError}{readFailed && <button type="button" className="ml-3 underline" onClick={markRead}>重试保存</button>}</p>
+        <p className="letter-status" role="status">{message || imageError || (replyHint ? '选中想回应的文字，右键添加批注回复；也可以点开已有批注。' : '')}{readFailed && <button type="button" className="ml-3 underline" onClick={markRead}>重试保存</button>}</p>
+        {(repliesError || repliesLoading) && <p role="status" className="annotation-message">{repliesLoading ? '正在读取批注回复…' : repliesError}{repliesError && <button type="button" className="annotation-reply-retry" onClick={onRetryReplies}>重试批注回复</button>}</p>}
       </PaperWorkspace>
       {zoom && <Modal onClose={() => setZoom(null)} label="查看照片"><div className="photo-panel panel-card"><img src={zoom} alt="放大的照片" /><button type="button" className="panel-ghost" onClick={() => setZoom(null)}>关闭照片</button></div></Modal>}
       <Panel open={confirmDelivery} onClose={() => { if (!busy) setConfirmDelivery(false) }} title="分享给对方">
@@ -113,7 +129,6 @@ function ReactionPanel({ reaction, loading, error, onRetry, mine, onClose, onSub
   const value = reaction || saved
   async function submit() {
     if (lock.current || (!emoji && !note.trim())) return
-    if (Array.from(note).length > 20) { setMessage('短评请保持在 20 字以内'); return }
     lock.current = true
     setBusy(true)
     try { await onSubmit({ emoji, note }); setSaved({ emoji, note }); sfxReact(); onChanged() }
@@ -123,12 +138,11 @@ function ReactionPanel({ reaction, loading, error, onRetry, mine, onClose, onSub
   return (
     <Panel open onClose={() => { if (!lock.current) onClose() }} title={mine ? '对方的回应' : '你的回应'} width="max-w-lg">
       {(loading || error) && <p role="status" className="mb-3 text-sm">{loading ? '正在读取回应…' : error}{error && !loading && <button type="button" className="ml-3 underline" onClick={onRetry}>重试读取回应</button>}</p>}
-      {value ? <p className="flex items-center gap-3">{reactionOf(value.emoji) && <img src={reactionOf(value.emoji).icon} alt={reactionOf(value.emoji).label} className="h-12 w-12" />}{value.note && <span>「{value.note}」</span>}</p> : loading || error ? null : mine ? <p className="text-sm">还没有回应。</p> : (
+      {value ? <p className="flex items-center gap-3">{reactionOf(value.emoji) && <img src={reactionOf(value.emoji).icon} alt={reactionOf(value.emoji).label} className="h-12 w-12" />}{value.note && <span className="min-w-0 whitespace-pre-wrap break-words">「{value.note}」</span>}</p> : loading || error ? null : mine ? <p className="text-sm">还没有回应。</p> : (
         <>
           <p className="mb-4 text-sm">每条内容可以回应一次，送出后不能修改。</p>
           <div className="panel-reactions">{REACTIONS.map((item) => <button type="button" key={item.key} disabled={busy} aria-pressed={emoji === item.key} onClick={() => setEmoji(emoji === item.key ? '' : item.key)} className="panel-reaction"><img src={item.icon} alt={item.label} /></button>)}</div>
-          <input aria-label="回应短评" value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} placeholder="想说的一句话（20 字以内）" className="panel-input text-sm" />
-          <p className="my-2 text-xs text-[var(--panel-muted)]">{Array.from(note).length}/20</p>
+          <textarea aria-label="回应内容" value={note} disabled={busy} onChange={(event) => setNote(event.target.value)} placeholder="写下你的回应…" rows={3} className="panel-input resize-y text-sm leading-7" />
           <p role="status" className="mb-3 text-sm">{message}</p>
           <button type="button" onClick={submit} disabled={busy || (!emoji && !note.trim())} className="panel-primary w-full">{busy ? '正在送出…' : '送出回应'}</button>
         </>

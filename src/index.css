@@ -242,6 +242,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #857c91; outline-
 .attachment-tray .remove-photo { position: absolute; top: -8px; right: -6px; padding: 0; width: 18px; height: 18px; line-height: 14px; background: #857c91; border-radius: 50%; }
 .annotation-marks { position: absolute; inset: 0; pointer-events: none; }
 .annotation-highlight, .paper-selection-mark { position: absolute; background: #F7D6D4; border-radius: 999px; }
+.annotation-highlight[data-tone="reply"] { background: #D6EAF5; }
+.annotation-highlight[data-tone="overlap"] { background: #E3DDF1; }
 .annotation-focus { position: absolute; z-index: 2; pointer-events: none; padding: 0; border: 0; background: transparent; border-radius: 2px; }
 .annotation-focus:focus-visible { outline: 2px solid #857c91; outline-offset: 2px; }
 .annotation-message { position: absolute; bottom: 8px; left: 40px; right: 40px; font-size: 11px; line-height: 16px; text-align: center; color: #716278; }
@@ -272,6 +274,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid #857c91; outline-
 .annotation-actions { position: absolute; top: 4px; left: 6px; right: 38px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .annotation-actions .annotation-delete { margin-right: auto; }
 .annotation-save:disabled { opacity: .38; }
+.annotation-card-reply {
+  --panel-bg: #F4F9FC; --panel-border: #C4DBE8; --panel-ink: #445E71;
+  --panel-muted: #718A9C; --panel-soft: #E5F0F7;
+}
+.annotation-card-reply .annotation-lines::selection { background: #D6EAF5; }
+.annotation-navigation { position: absolute; top: 4px; left: 6px; right: 38px; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.annotation-navigation-with-action { right: 70px; }
+.annotation-navigation::-webkit-scrollbar { display: none; }
+.annotation-card .annotation-navigation button { flex: none; width: 16px; }
+.annotation-navigation i { display: block; width: 7px; height: 7px; border: 1px solid #D8BFC4; border-radius: 50%; background: #F7D6D4; }
+.annotation-navigation .annotation-dot-reply { border-color: #AAC9DC; background: #D6EAF5; }
+.annotation-navigation button[aria-pressed="true"] i { outline: 1px solid var(--panel-muted); outline-offset: 2px; }
+.annotation-reply-error { margin-top: 8px; font-size: 11px; line-height: 1.7; color: #8E5967; overflow-wrap: anywhere; }
+.annotation-reply-retry { margin-left: 10px; text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }

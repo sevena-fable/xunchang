@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { fileHash, imagePath, IMAGE_EXTENSIONS, validateAttachments } from './letterImages'
 import { sameAnnotations, validateAnnotations } from './annotations'
+import { sameReply, validateReply } from './annotationReplies'
 
 const bucket = supabase.storage.from('letter-images')
 
@@ -92,4 +93,24 @@ export async function markRead(letter) {
 export async function submitReaction({ letterId, pairId, userId, emoji, note }) {
   const { error } = await supabase.from('reactions').insert({ letter_id: letterId, pair_id: pairId, user_id: userId, emoji: emoji || null, note: note?.trim() || null })
   if (error) throw failure(error)
+}
+
+// The UUID survives uncertain responses so retrying cannot create a second reply.
+export async function submitAnnotationReply({ letter, userId, id, start, end, quote, note }) {
+  const input = { id, letter_id: letter.id, pair_id: letter.pair_id, user_id: userId, start, end, quote, note }
+  try { validateReply(letter.content, input) } catch (error) { throw failure(error, true) }
+  const find = async () => {
+    const { data, error } = await supabase.from('annotation_replies').select('*').eq('id', id).maybeSingle().abortSignal(AbortSignal.timeout(20000))
+    if (error) throw failure(new Error(error.code === 'PGRST205' || error.code === '42P01' ? '批注回复尚未就绪，请稍后再试' : '批注回复暂时无法确认，请重试'), error.code === 'PGRST205' || error.code === '42P01')
+    if (data && !sameReply(data, input)) throw failure(new Error('这次回复已有不同内容的记录，请先核对'), true)
+    return data
+  }
+  const existing = await find()
+  if (existing) return existing
+  const { data, error, status } = await supabase.from('annotation_replies').insert(input).select().single().abortSignal(AbortSignal.timeout(20000))
+  if (!error) return data
+  const confirmed = await find()
+  if (confirmed) return confirmed
+  const definite = status >= 400 && status < 500 && status !== 408 && error.code !== '57014'
+  throw failure(new Error(error.code === '23505' ? '这段文字已经有你的回复，请关闭后刷新查看' : '回复尚未确认发送成功，请重试'), definite)
 }

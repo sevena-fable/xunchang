@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { LINE_HEIGHT, offsetTop, pageMetrics, pageStart, paperInputRange, paperSelection, paperTextRects, readPaperText, selectPaperText, writePaperText } from '../lib/paper'
 import { annotationSelection, characterCount, characterOffset, domOffset, moveAnnotations } from '../lib/annotations'
 import AnnotationPopover from './AnnotationPopover'
+import AnnotationReplyPopover from './AnnotationReplyPopover'
+import { annotationSegments } from '../lib/annotationReplies'
 import { sfxPaper } from '../lib/sfx'
 
 const NO_ANNOTATIONS = []
@@ -77,7 +79,7 @@ export function PaperWorkspace({ fitsViewport, onClose, disabled = false, childr
   )
 }
 
-export default function PaperSheet({ style, content = '', annotations = NO_ANNOTATIONS, onChange, onAnnotationsChange, header, onClose, disabled = false, readOnly = false, inputRef }) {
+export default function PaperSheet({ style, content = '', annotations = NO_ANNOTATIONS, onChange, onAnnotationsChange, header, onClose, disabled = false, readOnly = false, inputRef, replies = NO_ANNOTATIONS, onReply }) {
   const area = useRef(null)
   const paperWindow = useRef(null)
   const reading = useRef(null)
@@ -88,6 +90,8 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
   const documentValue = useRef({ content, annotations })
   const history = useRef({ entries: [{ content, annotations }], index: 0 })
   const [marks, setMarks] = useState([])
+  const [bands, setBands] = useState([])
+  const [replySelection, setReplySelection] = useState(null)
   const [selectionRects, setSelectionRects] = useState([])
   const [annotationEditor, setAnnotationEditor] = useState(null)
   const [annotationMessage, setAnnotationMessage] = useState('')
@@ -104,6 +108,8 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
   const [page, setPage] = useState(0)
   const editable = typeof onChange === 'function'
   const current = Math.min(page, layout.count - 1)
+  const canReply = !editable && !disabled && typeof onReply === 'function'
+  const displayItems = useMemo(() => [...annotations.map((item) => ({ ...item, tone: 'author' })), ...replies.map((item) => ({ ...item, tone: 'reply' }))], [annotations, replies])
   const canAnnotate = editable && !disabled && !readOnly && typeof onAnnotationsChange === 'function'
 
   useLayoutEffect(() => {
@@ -186,13 +192,26 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
     if (!fitsViewport || inComposition) { setMarks([]); return }
     const root = editable ? editor.current : reading.current
     const box = paperWindow.current.getBoundingClientRect()
-    setMarks(annotations.flatMap((item) => {
+    setMarks(displayItems.flatMap((item) => {
       const rects = paperTextRects(root, domOffset(content, item.start), domOffset(content, item.end), editable)
         .map((rect) => ({ left: rect.left - box.left, top: rect.top - box.top, width: rect.width, height: rect.height }))
         .filter((rect) => rect.top < box.height && rect.top + rect.height > 0)
       return rects.length ? [{ annotation: item, rects }] : []
     }))
-  }, [content, annotations, current, layout, size, editable, fitsViewport, inComposition])
+  }, [content, displayItems, current, layout, size, editable, fitsViewport, inComposition])
+
+  useLayoutEffect(() => {
+    if (editable) return
+    if (!fitsViewport || inComposition) { setBands([]); return }
+    const root = editable ? editor.current : reading.current
+    const box = paperWindow.current.getBoundingClientRect()
+    const selected = canReply && replySelection ? [replySelection] : []
+    setBands(annotationSegments(annotations, [...replies, ...selected]).flatMap((segment) =>
+      paperTextRects(root, domOffset(content, segment.start), domOffset(content, segment.end), editable)
+        .map((rect) => ({ ...segment, rect: { left: rect.left - box.left, top: rect.top - box.top, width: rect.width, height: rect.height } }))
+        .filter(({ rect }) => rect.top < box.height && rect.top + rect.height > 0)
+    ))
+  }, [content, annotations, replies, replySelection, current, layout, size, editable, fitsViewport, inComposition, canReply])
 
   useLayoutEffect(() => {
     if (!fitsViewport || inComposition) { setSelectionRects([]); return }
@@ -202,7 +221,9 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
       const selected = item
         ? { anchor: domOffset(content, item.start), focus: domOffset(content, item.end) }
         : paperSelection(root, editable)
-      if (!selected || selected.anchor === selected.focus) { setSelectionRects([]); return }
+      const nextRange = canReply && selected ? annotationSelection(content, selected) : null
+      setReplySelection((previous) => previous?.start === nextRange?.start && previous?.end === nextRange?.end ? previous : nextRange)
+      if (!selected || selected.anchor === selected.focus || canReply || (!editable && annotationEditor && replies.length)) { setSelectionRects([]); return }
       const box = paperWindow.current.getBoundingClientRect()
       setSelectionRects(paperTextRects(root, Math.min(selected.anchor, selected.focus), Math.max(selected.anchor, selected.focus), editable)
         .map((rect) => ({ left: rect.left - box.left, top: rect.top - box.top, width: rect.width, height: rect.height }))
@@ -211,7 +232,7 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
     changed()
     document.addEventListener('selectionchange', changed)
     return () => document.removeEventListener('selectionchange', changed)
-  }, [content, annotationEditor, current, layout, size, editable, fitsViewport, inComposition])
+  }, [content, annotationEditor, current, layout, size, editable, fitsViewport, inComposition, canReply])
 
   function edit(event) {
     if (disabled || readOnly || composing.current) return
@@ -257,24 +278,30 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
     onChange(nextContent, nextAnnotations)
   }
 
-  function openAnnotation(annotation, rect) {
+  function openAnnotation(annotation, rect, compose = false) {
     if (disabled || composing.current) return
     const box = paperWindow.current.getBoundingClientRect()
-    setAnnotationEditor({ annotation, anchor: { left: box.left + rect.left, top: box.top + rect.top, bottom: box.top + rect.top + rect.height } })
+    setAnnotationEditor({ annotation, compose, anchor: { left: box.left + rect.left, top: box.top + rect.top, bottom: box.top + rect.top + rect.height } })
   }
 
   function contextMenu(event) {
-    if (!canAnnotate || composing.current) return
-    const selected = paperSelection(editor.current)
+    if ((!canAnnotate && !canReply) || composing.current) return
+    const root = editable ? editor.current : reading.current
+    const selected = paperSelection(root, editable)
     if (!selected) return
     const range = annotationSelection(content, selected)
     if (!range) return
-    const rects = paperTextRects(editor.current, Math.min(selected.anchor, selected.focus), Math.max(selected.anchor, selected.focus), true)
+    const rects = paperTextRects(root, Math.min(selected.anchor, selected.focus), Math.max(selected.anchor, selected.focus), editable)
     const box = paperWindow.current.getBoundingClientRect()
     const rect = rects.find((item) => item.bottom > box.top && item.top < box.bottom)
     if (!rect) return
     event.preventDefault()
     selection.current = selected
+    if (canReply) {
+      const existing = replies.find((item) => item.start === range.start && item.end === range.end)
+      openAnnotation(existing || range, { left: rect.left - box.left, top: rect.top - box.top, height: rect.height }, !existing)
+      return
+    }
     const existing = annotations.find((item) => item.start < range.end && item.end > range.start)
     setAnnotationMessage(existing ? '选中的文字已有批注，可以在这里修改。' : '')
     openAnnotation(existing || range, { left: rect.left - box.left, top: rect.top - box.top, height: rect.height })
@@ -288,6 +315,7 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
       selected.collapse(selected.focusNode, selected.focusOffset)
     }
     setSelectionRects([])
+    setReplySelection(null)
     setAnnotationEditor(null)
     // Native dialog removal can clear the caret after restoring editor focus.
     cancelAnimationFrame(restoreFrame.current)
@@ -315,7 +343,7 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
     pointer.current = null
     const box = paperWindow.current.getBoundingClientRect()
     const x = event.clientX - box.left, y = event.clientY - box.top
-    for (const mark of marks) {
+    for (const mark of [...marks].reverse()) {
       const rect = mark.rects.find((item) => x >= item.left && x <= item.left + item.width && y >= item.top && y <= item.top + item.height)
       if (rect) { openAnnotation(mark.annotation, rect); return }
     }
@@ -362,16 +390,18 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
           onPointerCancel={() => { pointer.current = null }}
         >
           <div className="annotation-marks" aria-hidden="true">
-            {marks.flatMap((mark) => mark.rects.map((rect, index) => (
+            {editable ? marks.flatMap((mark) => mark.rects.map((rect, index) => (
               <span key={`${mark.annotation.id}-${index}`} className="annotation-highlight" style={highlightBand(rect)} />
-            )))}
+            ))) : bands.map((band, index) => (
+              <span key={`${band.start}-${band.end}-${index}`} className="annotation-highlight" data-tone={band.tone} style={highlightBand(band.rect)} />
+            ))}
             {selectionRects.map((rect, index) => (
               <span key={`selection-${index}`} className="paper-selection-mark" style={highlightBand(rect)} />
             ))}
           </div>
           {marks.map((mark) => (
-            <button key={mark.annotation.id} type="button" className="annotation-focus" style={mark.rects[0]} disabled={disabled}
-              aria-label={`批注：${mark.annotation.quote}`} onClick={(event) => { event.stopPropagation(); openAnnotation(mark.annotation, mark.rects[0]) }} />
+            <button key={`${mark.annotation.tone}:${mark.annotation.id}`} type="button" className="annotation-focus" style={mark.rects[0]} disabled={disabled}
+              aria-label={`${mark.annotation.tone === 'reply' ? '批注回复' : '批注'}：${mark.annotation.quote}`} onClick={(event) => { event.stopPropagation(); openAnnotation(mark.annotation, mark.rects[0]) }} />
           ))}
           {editable ? (
             <div
@@ -408,7 +438,7 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
         <button type="button" className="paper-turn paper-next" aria-label="下一页" disabled={disabled || current === layout.count - 1} onClick={() => flip(1)}><svg viewBox="0 0 16 24" aria-hidden="true"><path d="m6 5 6 7-6 7" /></svg></button>
       </footer>
       {annotationMessage && <p role="status" className="annotation-message">{annotationMessage}</p>}
-      {annotationEditor && <AnnotationPopover
+      {annotationEditor && (editable || (!canReply && !replies.length)) && <AnnotationPopover
         annotation={annotationEditor.annotation}
         anchor={annotationEditor.anchor}
         editable={canAnnotate}
@@ -418,6 +448,14 @@ export default function PaperSheet({ style, content = '', annotations = NO_ANNOT
           saveAnnotations([...annotations.filter((entry) => entry.id !== item.id), item].sort((a, b) => a.start - b.start))
         }}
         onDelete={() => saveAnnotations(annotations.filter((entry) => entry.id !== annotationEditor.annotation.id))}
+      />}
+      {annotationEditor && !editable && (canReply || replies.length > 0) && <AnnotationReplyPopover
+        key={`${annotationEditor.annotation.start}:${annotationEditor.annotation.end}:${annotationEditor.compose}`}
+        range={annotationEditor.annotation} items={displayItems.filter((item) => item.start < annotationEditor.annotation.end && item.end > annotationEditor.annotation.start)} anchor={annotationEditor.anchor} compose={annotationEditor.compose}
+        onClose={closeAnnotation}
+        onReply={canReply && !replies.some((item) => item.start === annotationEditor.annotation.start && item.end === annotationEditor.annotation.end)
+          ? () => setAnnotationEditor((value) => ({ ...value, compose: true })) : undefined}
+        onSend={async (reply) => { await onReply(reply); setAnnotationMessage('批注回复已发送') }}
       />}
     </section>
   )

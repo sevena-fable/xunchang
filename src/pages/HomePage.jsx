@@ -5,14 +5,14 @@ import ReadLetter from '../components/ReadLetter'
 import CalendarPanel from '../components/CalendarPanel'
 import SettingsPanel from '../components/SettingsPanel'
 import { useLetters } from '../hooks/useLetters'
-import { sendLetter, markRead, deliverLetter, submitReaction, resolveLetterImages } from '../lib/letters'
+import { sendLetter, markRead, deliverLetter, submitReaction, submitAnnotationReply, resolveLetterImages } from '../lib/letters'
 import { supabase } from '../lib/supabase'
 import { stopBgm, startBgm } from '../lib/bgm'
 import { sfxArrive } from '../lib/sfx'
 import Panel, { PrimaryButton, GhostButton } from '../components/Panel'
 
 export default function HomePage({ userId, profile, pair, partnerNickname, onChanged }) {
-  const { letters, unread, mySealed, history, reactions, error, loading, reactionLoading, reactionError, reload, reloadReactions } = useLetters({ pair, userId })
+  const { annotationReplies, repliesLoading, repliesError, reloadReplies, letters, unread, mySealed, history, reactions, error, loading, reactionLoading, reactionError, reload, reloadReactions } = useLetters({ pair, userId })
   const [panel, setPanel] = useState(null)
   const [readingId, setReadingId] = useState(null)
   const [askBgm, setAskBgm] = useState(true)
@@ -48,7 +48,7 @@ export default function HomePage({ userId, profile, pair, partnerNickname, onCha
       <WriteLetter open={panel === 'write'} onClose={() => setPanel(null)} pair={pair} userId={userId} onSend={sendLetter} onDone={reload} />
       <CalendarPanel open={panel === 'calendar'} onClose={() => setPanel(null)} history={history} unread={unread} mySealed={mySealed} userId={userId} onRead={(letter) => { setPanel(null); setReadingId(letter.id) }} />
       <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} profile={profile} pair={pair} partnerNickname={partnerNickname} onSave={saveNickname} onLogout={logout} />
-      {reading && <ReadLetter key={reading.id} letter={reading} userId={userId} reaction={reactions[reading.id]} reactionLoading={reactionLoading} reactionError={reactionError} onRetryReactions={reloadReactions} onClose={() => setReadingId(null)} onChanged={reload} onMarkRead={markRead} onDeliver={deliverLetter} onReact={submitReaction} resolveImages={resolveLetterImages} />}
+      {reading && <ReadLetter key={reading.id} letter={reading} userId={userId} replies={annotationReplies[reading.id]} repliesLoading={repliesLoading} repliesError={repliesError} onRetryReplies={reloadReplies} onReply={(reply) => submitAnnotationReply({ ...reply, letter: reading, userId })} reaction={reactions[reading.id]} reactionLoading={reactionLoading} reactionError={reactionError} onRetryReactions={reloadReactions} onClose={() => setReadingId(null)} onChanged={reload} onMarkRead={markRead} onDeliver={deliverLetter} onReact={submitReaction} resolveImages={resolveLetterImages} />}
       <Panel open={askBgm} title="背景音乐" subtitle="要播放音乐吗？之后可以在设置里随时开关。" onClose={() => setAskBgm(false)} width="max-w-sm">
         <div className="panel-actions">
           <GhostButton onClick={() => setAskBgm(false)}>先不听</GhostButton>

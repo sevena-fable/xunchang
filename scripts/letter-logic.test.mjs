@@ -87,3 +87,19 @@ test('annotation ranges move on exact edits without adopting repeated text', () 
   assert.deepEqual(moveAnnotations('甲甲甲甲', '甲甲甲', [repeated], { start: 2, end: 3 }), [])
   assert.deepEqual(moveAnnotations('甲甲甲甲', '甲甲甲', [repeated]), [])
 })
+
+
+test('reply highlights split partial, nested and equal overlaps without painting order differences', async () => {
+  const { annotationSegments, validateReply } = await import('../src/lib/annotationReplies.js')
+  const author = [{ start: 2, end: 8 }]
+  const replies = [{ start: 5, end: 10 }, { start: 6, end: 7 }]
+  assert.deepEqual(annotationSegments(author, replies), [
+    { start: 2, end: 5, tone: 'author' }, { start: 5, end: 8, tone: 'overlap' }, { start: 8, end: 10, tone: 'reply' },
+  ])
+  assert.deepEqual(annotationSegments(author, replies.toReversed()), annotationSegments(author, replies))
+  assert.deepEqual(annotationSegments([{ start: 0, end: 1 }, { start: 1, end: 2 }]), [{ start: 0, end: 1, tone: 'author' }, { start: 1, end: 2, tone: 'author' }])
+  assert.deepEqual(annotationSegments(author, author), [{ start: 2, end: 8, tone: 'overlap' }])
+  assert.deepEqual(annotationSegments(author, [{ start: 8, end: 10 }]), [{ start: 2, end: 8, tone: 'author' }, { start: 8, end: 10, tone: 'reply' }])
+  assert.doesNotThrow(() => validateReply(annotatedText, { ...annotation, note: '阅读者的长回复'.repeat(200) }))
+  assert.throws(() => validateReply(annotatedText, { ...annotation, quote: '错位的原文' }))
+})
