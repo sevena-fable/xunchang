@@ -1,0 +1,194 @@
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { promisify } from 'node:util'
+import ffmpeg from '@ffmpeg-installer/ffmpeg'
+import { createClient } from '@supabase/supabase-js'
+import { decodeHTML } from 'entities'
+
+const run = promisify(execFile)
+const origin = 'https://www.163cn.cc'
+const columns = 'id,title,audio_url,storage_path,created_at'
+const storageLimit = 6 * 1024 * 1024
+const songIdPattern = /^\d{1,9}$/
+const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
+
+function clean(html = '') {
+  return decodeHTML(html.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
+}
+
+export function parseSearch(html) {
+  const songs = new Map()
+  for (const match of html.matchAll(/<a\b[^>]*href="\/songs\/(\d+)\.html"[^>]*>([\s\S]*?)<\/a>/gi)) {
+    const [, id, card] = match
+    const title = clean(card.match(/<h3>([\s\S]*?)<\/h3>/i)?.[1])
+    const artist = clean(card.match(/<div class="s">([\s\S]*?)<\/div>/i)?.[1])
+    const date = clean(card.match(/<div class="d">([\s\S]*?)<\/div>/i)?.[1])
+    if (title && artist) songs.set(id, { id, title: title.slice(0, 150), artist: artist.slice(0, 100), date })
+    if (songs.size === 24) break
+  }
+  return [...songs.values()]
+}
+
+async function providerText(path, options) {
+  const response = await fetch(new URL(path, origin), {
+    ...options, redirect: 'error', signal: AbortSignal.timeout(9000),
+  })
+  if (!response.ok) throw new Error('曲库暂时无法连接，请稍后再试。')
+  return new TextDecoder().decode(await readBounded(response, 1024 * 1024))
+}
+
+async function readBounded(response, maximum) {
+  const advertisedSize = Number(response.headers.get('content-length'))
+  if (advertisedSize > maximum) {
+    await response.body?.cancel()
+    throw new Error('音频或曲库响应过大。')
+  }
+  if (!response.body) throw new Error('音源没有返回内容。')
+  const chunks = []
+  let size = 0
+  for await (const chunk of response.body) {
+    size += chunk.byteLength
+    if (size > maximum) throw new Error('音频或曲库响应过大。')
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks, size)
+}
+
+function audioFormat(bytes) {
+  if (bytes.toString('ascii', 0, 3) === 'ID3') return 'mp3'
+  if (bytes.toString('ascii', 0, 4) === 'fLaC') return 'flac'
+  if (bytes.toString('ascii', 4, 8) === 'ftyp') return 'mov'
+  if (bytes[0] === 255 && (bytes[1] & 246) === 240) return 'aac'
+  if (bytes[0] === 255 && (bytes[1] & 224) === 224) return 'mp3'
+  throw new Error('这个音源格式无法播放，请试试其他版本。')
+}
+
+export function giftId(pair, user, track) {
+  const value = createHash('sha256').update(`catalog:${pair}:${user}:${track}`).digest()
+  value[6] = (value[6] & 15) | 128
+  value[8] = (value[8] & 63) | 128
+  const hex = value.subarray(0, 16).toString('hex')
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-')
+}
+
+async function downloadTrack(id) {
+  const page = `/songs/${id}.html`
+  const [html, media] = await Promise.all([
+    providerText(page),
+    providerText(`/api/playurl.php?id=${id}`, {
+      headers: { Referer: origin + page, 'X-Requested-With': 'XMLHttpRequest' },
+    }),
+  ])
+  const title = clean(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1])
+  const artist = clean(html.match(/<div class="txt">\s*<a[^>]*>([\s\S]*?)<\/a>/i)?.[1])
+  if (!title || !artist) throw new Error('找不到这首歌，请重新搜索。')
+  let url
+  try { url = new URL(media.trim()) } catch { throw new Error('这个版本没有可用音源，请试试其他版本。') }
+  if (url.protocol !== 'https:' || url.username || url.password || url.port || !/^[a-z\d-]+\.kuwo\.cn$/.test(url.hostname)) {
+    throw new Error('这个版本没有可用音源，请试试其他版本。')
+  }
+  if (url.pathname.includes('/lx/resource/')) {
+    throw new Error('这个版本只有试听片段，请试试其他版本。')
+  }
+
+  const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) })
+  if (!response.ok) throw new Error('这个音源暂时无法下载，请试试其他版本。')
+  const input = await readBounded(response, 16 * 1024 * 1024)
+  const format = audioFormat(input)
+  const useM4a = format === 'aac' || format === 'mov'
+  const extension = useM4a ? 'm4a' : 'mp3'
+  const contentType = useM4a ? 'audio/mp4' : 'audio/mpeg'
+  const codec = format === 'flac' || (!useM4a && input.length >= storageLimit)
+    ? ['-c:a', 'libmp3lame', '-b:a', '128k']
+    : ['-c:a', 'copy']
+  const directory = await mkdtemp(join(tmpdir(), 'xunchang-song-'))
+  try {
+    const source = join(directory, 'source')
+    const output = join(directory, `track.${extension}`)
+    await writeFile(source, input)
+    try {
+      await run(ffmpeg.path, ['-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file',
+        '-f', format, '-i', source,
+        '-map', '0:a:0', '-map_metadata', '-1', '-map_chapters', '-1', ...codec,
+        '-fs', String(storageLimit + 1), output], { timeout: 30000, windowsHide: true })
+    } catch {
+      throw new Error('这个音源无法转换，请试试其他版本。')
+    }
+    const size = (await stat(output)).size
+    if (size >= storageLimit) throw new Error('这首歌超过 6 MB，请试试其他版本。')
+    if (size < 200000) throw new Error('这个音源太短，可能是试听片段，请试试其他版本。')
+    return { bytes: await readFile(output), title: `${title} · ${artist}`.slice(0, 200), extension, contentType }
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
+async function saveTrack(client, pairId, userId, trackId) {
+  const id = giftId(pairId, userId, trackId)
+  const table = () => client.from('song_gifts')
+  const lookup = () => table().select(columns).eq('id', id).eq('sender_id', userId).maybeSingle()
+  const existing = await lookup()
+  if (existing.error) throw new Error('留歌列表暂时无法读取，请重试。')
+  if (existing.data) return existing.data
+
+  const { bytes, title, extension, contentType } = await downloadTrack(trackId)
+  const path = `${pairId}/${userId}/${id}.${extension}`
+  const bucket = client.storage.from('song-gifts')
+  const uploaded = await bucket.upload(path, Uint8Array.from(bytes).buffer, { contentType })
+  const uploadError = uploaded.error
+  if (uploadError && String(uploadError.statusCode) !== '409' && !/already exists/i.test(uploadError.message)) {
+    throw new Error('音频保存失败，请重试。')
+  }
+  const saved = await table().insert({ id, title, pair_id: pairId, sender_id: userId, storage_path: path })
+    .select(columns).single().abortSignal(AbortSignal.timeout(8000))
+  if (saved.data) return saved.data
+  const recovered = await lookup()
+  if (recovered.data) return recovered.data
+  if (!uploadError && saved.status >= 400 && saved.status < 500 && saved.error?.code !== '23505') {
+    await bucket.remove([path]).catch(() => {})
+  }
+  throw new Error('歌曲暂未加入列表，请重试。')
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store')
+  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: '请求方式不支持。' })
+  const token = req.headers.authorization?.match(/^Bearer (\S+)$/i)?.[1]
+  if (!token) return res.status(401).json({ error: '请登录后再搜歌。' })
+  const url = process.env.VITE_SUPABASE_URL
+  const key = process.env.VITE_SUPABASE_ANON_KEY
+  if (!url || !key) return res.status(503).json({ error: '搜歌服务暂未配置。' })
+  const client = createClient(url, key, {
+    accessToken: async () => token,
+    global: { fetch: (resource, init) => fetch(resource, { ...init, signal: AbortSignal.any([AbortSignal.timeout(10000), ...(init?.signal ? [init.signal] : [])]) }) },
+  })
+
+  try {
+    const authResponse = await fetch(new URL('/auth/v1/user', url), {
+      headers: { apikey: key, Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000),
+    })
+    if (!authResponse.ok) return res.status(401).json({ error: '登录已失效，请重新登录。' })
+    const { id: userId } = await authResponse.json()
+    const pairId = req.method === 'GET' ? req.query.pair : req.body?.pair
+    if (typeof pairId !== 'string' || !uuidPattern.test(pairId)) return res.status(400).json({ error: '未找到配对空间。' })
+    const pair = await client.from('pairs').select('id').eq('id', pairId).eq('status', 'paired')
+      .or(`user_a.eq.${userId},user_b.eq.${userId}`).maybeSingle()
+    if (!pair.data) return res.status(403).json({ error: '完成配对后就可以搜歌。' })
+
+    if (req.method === 'GET') {
+      const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+      if (!query || query.length > 80) return res.status(400).json({ error: '请输入 1–80 个字符。' })
+      const songs = parseSearch(await providerText(`/search.html?keyword=${encodeURIComponent(query)}`))
+      return res.status(200).json({ songs })
+    }
+    const track = req.body?.track
+    if (typeof track !== 'string' || !songIdPattern.test(track)) return res.status(400).json({ error: '歌曲编号无效。' })
+    return res.status(200).json({ song: await saveTrack(client, pairId, userId, track) })
+  } catch (error) {
+    const message = /[\u4e00-\u9fff]/.test(error.message) ? error.message : '搜歌服务暂时不可用，请稍后重试。'
+    return res.status(502).json({ error: message })
+  }
+}

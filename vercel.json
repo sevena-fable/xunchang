@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/song-catalog.js": {
+      "maxDuration": 60,
+      "includeFiles": "node_modules/@ffmpeg-installer/linux-x64/ffmpeg"
+    }
+  }
+}

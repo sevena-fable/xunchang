@@ -98,4 +98,32 @@ export async function loadSongGifts(pairId, partnerId, signal) {
   return gifts.map((gift) => ({ id: gift.id, url: gift.audio_url || urls.get(gift.storage_path) }))
 }
 
-export const songGiftActions = { list: listOwnSongGifts, send: sendSongGift, remove: removeSongGift }
+async function catalogRequest(path, options = {}) {
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('请登录后再搜歌。')
+  const response = await fetch(`/api/song-catalog${path}`, {
+    ...options,
+    headers: { ...options.headers, Authorization: `Bearer ${token}` },
+  })
+  const result = await response.json().catch(() => null)
+  if (!response.ok || !result) throw new Error(result?.error || '搜歌服务暂时不可用，请稍后重试。')
+  return result
+}
+
+async function searchCatalog(pair, query, signal) {
+  const params = new URLSearchParams({ pair: pair.id, q: query })
+  return (await catalogRequest(`?${params}`, { signal })).songs
+}
+
+async function addCatalogSong(pair, track) {
+  return (await catalogRequest('', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pair: pair.id, track: track.id }), signal: AbortSignal.timeout(55000),
+  })).song
+}
+
+export const songGiftActions = {
+  list: listOwnSongGifts, send: sendSongGift, remove: removeSongGift,
+  search: searchCatalog, addFromCatalog: addCatalogSong,
+}

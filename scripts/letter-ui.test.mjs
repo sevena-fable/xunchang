@@ -155,6 +155,25 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     await list.getByRole('button', { name: '移除 测试' }).click()
     await expect(list.getByText('测试', { exact: true })).toHaveCount(0)
     assert.equal(removals, 1)
+    await page.route('**/api/song-catalog**', (route) => {
+      const request = route.request()
+      if (request.method() === 'GET') {
+        assert.equal(new URL(request.url()).searchParams.get('q'), '想自由')
+        return route.fulfill({ json: { songs: [
+          { id: '511', title: '想自由', artist: '林宥嘉', date: '2011-05-06' },
+          { id: '58527', title: '想自由(Live)', artist: '林宥嘉', date: '2013-07-05' },
+        ] } })
+      }
+      assert.deepEqual(request.postDataJSON(), { pair: pair.id, track: '58527' })
+      return route.fulfill({ json: { song: { id: a, title: '想自由(Live) · 林宥嘉' } } })
+    })
+    await page.getByRole('searchbox', { name: '搜索歌曲' }).fill('想自由')
+    await page.getByRole('button', { name: '搜索', exact: true }).click()
+    const results = page.getByRole('list', { name: '搜歌结果' })
+    await expect(results.getByText('想自由', { exact: true })).toBeVisible()
+    await results.getByRole('button', { name: '添加 想自由(Live) · 林宥嘉' }).click()
+    await expect(list.getByText('想自由(Live) · 林宥嘉')).toBeVisible()
+    await expect(results.getByRole('button', { name: '已添加 想自由(Live) · 林宥嘉' })).toBeDisabled()
   } finally { await context.close() }
 })
 

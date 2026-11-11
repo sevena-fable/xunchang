@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { PrimaryButton } from './Panel'
+import SongCatalogSearch from './SongCatalogSearch'
 
 function songName(song, index) {
   if (song.title) return song.title
@@ -21,6 +22,8 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
   const [link, setLink] = useState('')
   const [dragging, setDragging] = useState(false)
   const [pending, setPending] = useState('')
+  const [catalogPending, setCatalogPending] = useState(null)
+  const [catalogError, setCatalogError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -82,9 +85,32 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
     }, '已移除')
   }
 
+  async function addFromCatalog(track) {
+    let saved
+    const success = await runAction(async () => {
+      setCatalogError('')
+      setCatalogPending(track.id)
+      setPending(track.title)
+      try {
+        saved = await actions.addFromCatalog(pair, track)
+        setSongs((current) => current.some((item) => item.id === saved.id) ? current : [...current, saved])
+      } catch (error) {
+        setCatalogError(error.name === 'TimeoutError' ? '保存超时，请重新点击添加。' : error.message)
+        throw error
+      } finally {
+        setCatalogPending(null)
+        setPending('')
+      }
+    }, '已添加到留歌列表')
+    if (success) return saved
+  }
+
   return (
-    <form onSubmit={submitLink} className="panel-box my-5 space-y-3 px-4 py-3 text-sm">
+    <div className="panel-box my-5 space-y-3 px-4 py-3 text-sm">
       <h4 className="font-semibold">给对方留一首歌</h4>
+      <SongCatalogSearch pair={pair} search={actions.search} add={addFromCatalog} disabled={disabled}
+        pending={catalogPending} savedSongs={songs} />
+      {catalogError && <p role="alert" className="text-xs">{catalogError}</p>}
       <div
         className={`space-y-2 rounded-xl border border-dashed px-3 py-3 ${dragging ? 'border-current bg-[var(--panel-soft)]' : 'border-[var(--panel-muted)]'}`}
         onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true) }}
@@ -100,11 +126,13 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
         <button type="button" className="panel-link" disabled={disabled} onClick={() => picker.current.click()}>选择音频文件</button>
         <p className="text-xs text-[var(--panel-muted)]">自动保存，每首最多 6 MB。</p>
       </div>
-      <label className="block text-xs text-[var(--panel-muted)]">或粘贴 HTTPS 音频直链
+      <form onSubmit={submitLink} className="space-y-2">
+        <label className="block text-xs text-[var(--panel-muted)]">或粘贴 HTTPS 音频直链
         <input type="url" value={link} maxLength={2048} disabled={disabled} placeholder="https://…"
           onChange={(event) => setLink(event.target.value)} className="panel-input mt-2" />
-      </label>
-      {link.trim() && <PrimaryButton type="submit" disabled={disabled}>添加链接</PrimaryButton>}
+        </label>
+        {link.trim() && <PrimaryButton type="submit" disabled={disabled}>添加链接</PrimaryButton>}
+      </form>
       {loading && <p role="status">正在读取留歌列表…</p>}
       {loadError && <p role="status">留歌列表读取失败。 <button type="button" className="panel-link" disabled={busy} onClick={() => setAttempt((value) => value + 1)}>重试</button></p>}
       {songs.length > 0 && <ul aria-label="已留的歌" className="divide-y divide-[var(--panel-soft)]">
@@ -118,6 +146,6 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
         })}
       </ul>}
       {pending && <p role="status" className="break-all">正在保存 {pending}…</p>}
-    </form>
+    </div>
   )
 }
