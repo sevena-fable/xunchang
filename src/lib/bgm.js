@@ -1,15 +1,19 @@
 import { useSyncExternalStore } from 'react'
 
+const defaultSource = '/bgm.mp3'
 let audio = null
 let playing = false
+let request = 0
 const listeners = new Set()
 
-function ensure() {
-  if (audio) return audio
-  audio = new Audio('/bgm.mp3')
+function ensure(source) {
+  if (audio?.getAttribute('src') === source) return audio
+  stopBgm()
+  audio = new Audio(source)
   audio.loop = true
   audio.volume = 0.32
-  audio.addEventListener('error', () => setPlaying(false))
+  const current = audio
+  audio.addEventListener('error', () => { if (audio === current) setPlaying(false) })
   return audio
 }
 
@@ -19,18 +23,33 @@ function setPlaying(next) {
   listeners.forEach((listener) => listener())
 }
 
-export function startBgm() {
-  const a = ensure()
+export async function startBgm(source = audio?.getAttribute('src') || defaultSource) {
+  const a = ensure(source)
+  const token = ++request
   a.currentTime = 0
   setPlaying(true)
-  a.play().catch(() => setPlaying(false))
+  try {
+    await a.play()
+    return token === request
+  } catch {
+    if (token === request) setPlaying(false)
+    return false
+  }
 }
 
 export function stopBgm() {
+  request++
   setPlaying(false)
   if (!audio) return
   audio.pause()
   audio.currentTime = 0
+}
+
+export function resetBgm() {
+  stopBgm()
+  audio?.removeAttribute('src')
+  audio?.load()
+  audio = null
 }
 
 export function toggleBgm() {

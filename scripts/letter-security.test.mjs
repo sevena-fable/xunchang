@@ -55,6 +55,35 @@ test('migration and RLS enforce private letters, images, reactions and pairing',
     async function asUser(id, role = 'authenticated') {
       await db.exec(`reset role; set role ${role}; select set_config('request.jwt.claim.sub', '${id || ''}', false);`)
     }
+    await db.exec(await sqlFile('migrations/20261111014850_song_gifts.sql'))
+    const giftId = 'bbbbbbbb-1234-4321-9876-aaaaaaaaaaaa'
+    const audio = `${PAIR}/${A}/${giftId}.mp3`
+    const upload = `insert into storage.objects(bucket_id,name) values ('song-gifts','${audio}')`
+    const sendGift = `insert into public.song_gifts(id,pair_id,sender_id,storage_path) values ('${giftId}','${PAIR}','${A}','${audio}')`
+    const audioCount = async () => (await db.query("select name from storage.objects where bucket_id='song-gifts'")).rows.length
+    const acknowledge = 'update public.song_gifts set seen_at=now() returning id'
+    await asUser(B)
+    await assert.rejects(db.exec(upload))
+    await assert.rejects(db.exec(sendGift))
+    await asUser(A)
+    await db.exec(upload)
+    await asUser(B)
+    assert.equal(await audioCount(), 0)
+    await asUser(A)
+    await db.exec(sendGift)
+    assert.equal((await db.query(acknowledge)).rows.length, 0)
+    assert.equal((await db.query("delete from storage.objects where bucket_id='song-gifts' returning id")).rows.length, 0)
+    await asUser(C)
+    assert.equal(await audioCount(), 0)
+    assert.equal((await db.query('select id from public.song_gifts')).rows.length, 0)
+    await asUser(null, 'anon')
+    assert.equal(await audioCount(), 0)
+    await asUser(B)
+    assert.equal(await audioCount(), 1)
+    await assert.rejects(db.exec("update public.song_gifts set audio_url='https://example.org/test.mp3'"))
+    assert.equal((await db.query(acknowledge)).rows.length, 1)
+    assert.equal((await db.query(acknowledge)).rows.length, 0)
+    await db.exec("reset role; delete from storage.objects where bucket_id='song-gifts'; delete from public.song_gifts")
     await asUser(B)
     assert.equal((await db.query('select * from public.letters')).rows.length, 1)
     assert.deepEqual((await db.query('select name from storage.objects')).rows.map((row) => row.name), [`${A}/sent.jpg`])

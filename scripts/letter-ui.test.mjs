@@ -17,10 +17,14 @@ expect.extend({
 const PORT = process.env.TEST_PORT || '5187'
 const BASE = `http://127.0.0.1:${PORT}`
 const PRODUCTION = process.env.TEST_PRODUCTION === '1'
+const MOCK_SUPABASE = 'https://song-test.supabase.co'
 let browser
 let server
 before(async () => {
-  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', ...(PRODUCTION ? ['preview'] : []), '--host', '127.0.0.1', '--port', PORT, '--strictPort'], { stdio: ['ignore', 'pipe', 'pipe'] })
+  server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', ...(PRODUCTION ? ['preview'] : []), '--host', '127.0.0.1', '--port', PORT, '--strictPort'], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, VITE_SUPABASE_URL: MOCK_SUPABASE, VITE_SUPABASE_ANON_KEY: 'mock-key' },
+  })
   await new Promise((resolve, reject) => {
     let output = ''
     const timer = setTimeout(() => reject(new Error('测试服务器未启动：' + output)), 20000)
@@ -35,6 +39,92 @@ before(async () => {
   browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined), headless: true })
 })
 after(async () => { await browser?.close(); server?.kill() })
+
+test('settings accepts a dropped link and a picked audio file; the next visit can hear or skip the gift', { skip: PRODUCTION, timeout: 40000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 768 } })
+  try {
+    const page = await context.newPage()
+    const a = '11111111-1111-1111-1111-111111111111'
+    const b = '22222222-2222-2222-2222-222222222222'
+    const pair = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', user_a: a, user_b: b, status: 'paired' }
+    const user = { id: a, user_metadata: {} }
+    const expiry = Math.floor(Date.now() / 1000) + 3600
+    const token = ['eyJhbGciOiJIUzI1NiJ9', Buffer.from(JSON.stringify({ sub: a, exp: expiry })).toString('base64url'), 'mock'].join('.')
+    await page.addInitScript(({ user, token, expiry }) => {
+      localStorage.setItem('sb-song-test-auth-token', JSON.stringify({ user, access_token: token, refresh_token: 'mock', expires_at: expiry }))
+      window.playedSources = []
+      const play = HTMLMediaElement.prototype.play
+      HTMLMediaElement.prototype.play = function () { window.playedSources.push(this.src); return play.call(this) }
+    }, { user, token, expiry })
+    const wave = Buffer.alloc(44 + 16000)
+    wave.write('RIFF'); wave.writeUInt32LE(wave.length - 8, 4); wave.write('WAVEfmt ', 8)
+    wave.writeUInt32LE(16, 16); wave.writeUInt16LE(1, 20); wave.writeUInt16LE(1, 22)
+    wave.writeUInt32LE(8000, 24); wave.writeUInt32LE(16000, 28); wave.writeUInt16LE(2, 32)
+    wave.writeUInt16LE(16, 34); wave.write('data', 36); wave.writeUInt32LE(wave.length - 44, 40)
+    const link = 'https://audio.example.test/demo.wav'
+    await page.route(link, (route) => route.fulfill({ body: wave, contentType: 'audio/wav' }))
+    let incoming = null
+    const sent = []
+    const uploaded = []
+    let acknowledgements = 0
+    await page.route(`${MOCK_SUPABASE}/**`, (route) => {
+      const request = route.request()
+      const url = new URL(request.url())
+      const json = (value) => route.fulfill({ json: value })
+      if (url.pathname.endsWith('/profiles')) return json([{ id: a, nickname: url.searchParams.get('id') === `eq.${b}` ? '阿灰' : '小寻' }])
+      if (url.pathname.endsWith('/pairs')) return json([pair])
+      if (url.pathname.includes('/storage/v1/object/sign/song-gifts/')) {
+        return json({ signedURL: '/object/sign/song-gifts/demo.wav?token=test' })
+      }
+      if (url.pathname.includes('/storage/v1/object/song-gifts/')) {
+        uploaded.push(url.pathname)
+        return json({ Key: url.pathname })
+      }
+      if (url.pathname.endsWith('/song_gifts')) {
+        if (request.method() === 'POST') { sent.push(request.postDataJSON()); return route.fulfill({ status: 201 }) }
+        if (request.method() === 'PATCH') { acknowledgements++; incoming = null; return route.fulfill({ status: 204 }) }
+        return json(incoming ? [incoming] : [])
+      }
+      return json([])
+    })
+    const prompt = page.getByRole('dialog', { name: '背景音乐' })
+    await page.goto(BASE)
+    await expect(prompt.getByRole('button', { name: '播放', exact: true })).toBeEnabled()
+    await prompt.getByRole('button', { name: '先不听' }).click()
+    await page.getByRole('button', { name: '设置' }).click()
+    const drop = page.getByText('拖入音频文件或音频链接', { exact: true })
+    await drop.dispatchEvent('drop', { dataTransfer: await page.evaluateHandle((url) => {
+      const transfer = new DataTransfer()
+      transfer.setData('text/uri-list', url)
+      return transfer
+    }, link) })
+    await expect(page.getByRole('textbox', { name: /音频直链/ })).toHaveValue(link)
+    await page.getByRole('button', { name: '留下这首歌' }).click()
+    await expect(page.getByText('已留歌，对方下次进入时会看到提示。')).toBeVisible()
+    assert.equal(sent[0].audio_url, link)
+    const picker = page.waitForEvent('filechooser')
+    await page.getByRole('button', { name: '选择音频文件' }).click()
+    await (await picker).setFiles({ name: '测试.wav', mimeType: 'audio/wav', buffer: wave })
+    await page.getByRole('button', { name: '留下这首歌' }).click()
+    await expect.poll(() => sent.length).toBe(2)
+    assert.ok(uploaded[0].endsWith(sent[1].storage_path))
+    incoming = { id: sent[0].id, created_at: new Date().toISOString(), audio_url: link }
+    await page.reload()
+    await expect(prompt.getByText('阿灰给你留了一首歌，现在要听吗？')).toBeVisible()
+    assert.deepEqual(await page.evaluate(() => window.playedSources), [])
+    await prompt.getByRole('button', { name: '听这首' }).click()
+    await expect(prompt).toBeHidden()
+    await expect.poll(() => acknowledgements).toBe(1)
+    assert.deepEqual(await page.evaluate(() => window.playedSources), [link])
+    incoming = { id: sent[1].id, created_at: new Date().toISOString(), storage_path: sent[1].storage_path }
+    await page.reload()
+    await expect(prompt.getByText('阿灰给你留了一首歌，现在要听吗？')).toBeVisible()
+    await expect(prompt.getByRole('button', { name: '听这首' })).toBeEnabled()
+    await prompt.getByRole('button', { name: '先不听' }).click()
+    await expect.poll(() => acknowledgements).toBe(2)
+    assert.deepEqual(await page.evaluate(() => window.playedSources), [])
+  } finally { await context.close() }
+})
 
 async function preview(viewport = { width: 1366, height: 768 }) {
   const context = await browser.newContext({ viewport })
@@ -1753,6 +1843,7 @@ async function live() {
       return reply([{ id: url.searchParams.get('id')?.slice(3), nickname: '测试' }])
     }
     if (url.pathname === '/rest/v1/pairs') return reply([{ id: PAIR, user_a: ME, user_b: YOU, status: 'paired', invite_code: 'TEST1234' }])
+    if (url.pathname === '/rest/v1/song_gifts') return reply([])
     if (url.pathname === '/rest/v1/annotation_replies') {
       if (state.replyError) return reply({ message: '批注回复读取失败', code: 'XX000' }, 500)
       if (method === 'POST') {

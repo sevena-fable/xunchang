@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import Panel, { PrimaryButton, GhostButton } from './Panel'
 import { toggleBgm, useBgmPlaying } from '../lib/bgm'
+import SongGiftForm from './SongGiftForm'
 
-export default function SettingsPanel({ open, onClose, profile, pair, partnerNickname, onSave, onLogout }) {
+export default function SettingsPanel({ open, onClose, profile, pair, partnerNickname, onSave, onLogout, onSendSong }) {
   const bgmPlaying = useBgmPlaying()
   const [nickname, setNickname] = useState(profile.nickname || '')
   const [busy, setBusy] = useState(false)
@@ -19,8 +20,8 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
     lock.current = true
     setBusy(true)
     setMessage('')
-    try { await action(); if (alive.current) setMessage(success) }
-    catch (error) { if (alive.current) setMessage('操作未完成：' + error.message) }
+    try { await action(); if (alive.current) setMessage(success); return true }
+    catch (error) { if (alive.current) setMessage('操作未完成：' + error.message); return false }
     finally { lock.current = false; if (alive.current) setBusy(false) }
   }
 
@@ -46,6 +47,7 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
           </button>
         </p>
       </div>
+      {open && onSendSong && <SongGiftForm busy={busy} onSend={(input) => run(() => onSendSong(input), '已留歌，对方下次进入时会看到提示。')} />}
       <p className="min-h-5 text-sm" role="status">{message}</p>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <button type="button" disabled={busy} onClick={() => run(onLogout, '已离开桌前')} className="panel-link text-xs">退出登录</button>
