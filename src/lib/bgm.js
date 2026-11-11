@@ -46,10 +46,11 @@ async function playTrack(index, remaining = playlist.length) {
   const source = playlist[index]
   if (a.getAttribute('src') !== source) a.src = source
   else a.currentTime = 0
-  setPlaying(true)
   try {
     await a.play()
-    return token === request
+    if (token !== request) return false
+    setPlaying(true)
+    return true
   } catch {
     if (token !== request) return false
     if (a.error && remaining > 1) return playTrack((index + 1) % playlist.length, remaining - 1)

@@ -5,6 +5,7 @@ import ReadLetter from '../components/ReadLetter'
 import CalendarPanel from '../components/CalendarPanel'
 import SettingsPanel from '../components/SettingsPanel'
 import EntryMusic from '../components/EntryMusic'
+import DeskTurntable from '../components/DeskTurntable'
 import { useLetters } from '../hooks/useLetters'
 import { sendLetter, markRead, deliverLetter, submitReaction, submitAnnotationReply, resolveLetterImages } from '../lib/letters'
 import { supabase } from '../lib/supabase'
@@ -49,6 +50,7 @@ export default function HomePage({ userId, profile, pair, partnerNickname, onCha
       <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} profile={profile} pair={pair} partnerNickname={partnerNickname} onSave={saveNickname} onLogout={logout}
         songGiftActions={partnerId ? songGiftActions : undefined} />
       {reading && <ReadLetter key={reading.id} letter={reading} userId={userId} replies={annotationReplies[reading.id]} repliesLoading={repliesLoading} repliesError={repliesError} onRetryReplies={reloadReplies} onReply={(reply) => submitAnnotationReply({ ...reply, letter: reading, userId })} reaction={reactions[reading.id]} reactionLoading={reactionLoading} reactionError={reactionError} onRetryReactions={reloadReactions} onClose={() => setReadingId(null)} onChanged={reload} onMarkRead={markRead} onDeliver={deliverLetter} onReact={submitReaction} resolveImages={resolveLetterImages} />}
+      <DeskTurntable />
       <EntryMusic key={`${pair.id}:${userId}`} pairId={pair.id} partnerId={partnerId} partnerNickname={partnerNickname} />
     </Scene>
   )
