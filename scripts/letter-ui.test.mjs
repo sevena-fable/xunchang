@@ -101,7 +101,9 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
           if (index >= 0) sent.splice(index, 1)
           return route.fulfill({ status: 204 })
         }
-        return json(url.searchParams.get('sender_id') === `eq.${a}` ? sent : incoming)
+        const id = url.searchParams.get('id')
+        const rows = url.searchParams.get('sender_id') === `eq.${a}` ? sent : incoming
+        return json(id ? rows.filter((song) => id === `eq.${song.id}`) : rows)
       }
       return json([])
     })

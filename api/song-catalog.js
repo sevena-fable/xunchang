@@ -1,5 +1,4 @@
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +6,7 @@ import { promisify } from 'node:util'
 import ffmpeg from '@ffmpeg-installer/ffmpeg'
 import { createClient } from '@supabase/supabase-js'
 import { decodeHTML } from 'entities'
+import { catalogGiftId } from '../src/lib/catalogGiftId.js'
 
 const run = promisify(execFile)
 const origin = 'https://www.163cn.cc'
@@ -16,6 +16,9 @@ const songIdPattern = /^\d{1,9}$/
 const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
 class SourceUnavailable extends Error {}
+
+// Studio track duration from the publisher's catalog on Kugou.
+const verifiedDurations = new Map([['511', 281.678]])
 
 function clean(html = '') {
   return decodeHTML(html.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
@@ -68,21 +71,29 @@ function audioFormat(bytes) {
   throw new Error('这个音源格式无法播放，请试试其他版本。')
 }
 
-export function giftId(pair, user, track) {
-  const value = createHash('sha256').update(`catalog:${pair}:${user}:${track}`).digest()
-  value[6] = (value[6] & 15) | 128
-  value[8] = (value[8] & 63) | 128
-  const hex = value.subarray(0, 16).toString('hex')
-  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-')
+async function resolveMedia(id, page) {
+  const headers = { Referer: origin + page, 'X-Requested-With': 'XMLHttpRequest' }
+  const path = `/api/playurl.php?id=${id}`
+  try {
+    const media = (await providerText(path, { headers })).trim()
+    if (media) return media
+  } catch {
+    // Retry a transient resolver failure once. A returned preview is handled separately.
+  }
+  return (await providerText(path, { headers: { ...headers, 'Cache-Control': 'no-cache' } })).trim()
+}
+
+function outputSeconds(progress) {
+  const times = [...progress.matchAll(/^out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/gm)]
+  const last = times.at(-1)
+  return last ? Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]) : 0
 }
 
 async function downloadTrack(id) {
   const page = `/songs/${id}.html`
   const [html, media] = await Promise.all([
     providerText(page),
-    providerText(`/api/playurl.php?id=${id}`, {
-      headers: { Referer: origin + page, 'X-Requested-With': 'XMLHttpRequest' },
-    }),
+    resolveMedia(id, page),
   ])
   const title = clean(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1])
   const artist = clean(html.match(/<div class="txt">\s*<a[^>]*>([\s\S]*?)<\/a>/i)?.[1])
@@ -111,17 +122,23 @@ async function downloadTrack(id) {
     const source = join(directory, 'source')
     const output = join(directory, `track.${extension}`)
     await writeFile(source, input)
+    let progress
     try {
-      await run(ffmpeg.path, ['-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file',
+      const result = await run(ffmpeg.path, ['-nostdin', '-v', 'error', '-xerror', '-protocol_whitelist', 'file',
         '-f', format, '-i', source,
         '-map', '0:a:0', '-map_metadata', '-1', '-map_chapters', '-1', ...codec,
-        '-fs', String(storageLimit + 1), output], { timeout: 30000, windowsHide: true })
+        '-progress', 'pipe:1', '-fs', String(storageLimit + 1), output], { timeout: 30000, windowsHide: true })
+      progress = result.stdout
     } catch {
       throw new Error('这个音源无法转换，请试试其他版本。')
     }
     const size = (await stat(output)).size
     if (size >= storageLimit) throw new Error('这首歌超过 6 MB，请试试其他版本。')
-    if (size < 200000) throw new SourceUnavailable('曲库返回的音频太短，可能是试听片段。')
+    const seconds = outputSeconds(progress)
+    const expected = verifiedDurations.get(id)
+    if (seconds < 30 || (expected && Math.abs(seconds - expected) > 4)) {
+      throw new SourceUnavailable('曲库返回的音频时长不符，请上传这个版本的完整文件。')
+    }
     return { bytes: await readFile(output), title: `${title} · ${artist}`.slice(0, 200), extension, contentType }
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -129,7 +146,7 @@ async function downloadTrack(id) {
 }
 
 async function saveTrack(client, pairId, userId, trackId) {
-  const id = giftId(pairId, userId, trackId)
+  const id = await catalogGiftId(pairId, userId, trackId)
   const table = () => client.from('song_gifts')
   const lookup = () => table().select(columns).eq('id', id).eq('sender_id', userId).maybeSingle()
   const existing = await lookup()
@@ -183,7 +200,11 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
       if (!query || query.length > 80) return res.status(400).json({ error: '请输入 1–80 个字符。' })
-      const songs = parseSearch(await providerText(`/search.html?keyword=${encodeURIComponent(query)}`))
+      const matches = parseSearch(await providerText(`/search.html?keyword=${encodeURIComponent(query)}`))
+      const songs = await Promise.all(matches.map(async (song) => ({
+        ...song, savedId: await catalogGiftId(pairId, userId, song.id),
+        expectedDuration: verifiedDurations.get(song.id),
+      })))
       return res.status(200).json({ songs })
     }
     const track = req.body?.track

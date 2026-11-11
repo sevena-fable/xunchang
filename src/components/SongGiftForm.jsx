@@ -114,8 +114,8 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
       setCatalogPending(track.id)
       setPending(file.name)
       try {
-        saved = await actions.send({ file, pair, userId })
-        setSongs((current) => [...current, saved])
+        saved = await actions.send({ file, pair, userId, catalogTrack: track })
+        setSongs((current) => current.some((item) => item.id === saved.id) ? current : [...current, saved])
       } finally {
         setCatalogPending(null)
         setPending('')

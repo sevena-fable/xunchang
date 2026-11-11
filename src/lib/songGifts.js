@@ -1,10 +1,11 @@
 import { supabase } from './supabase'
+import { catalogGiftId } from './catalogGiftId'
 
 const bucket = supabase.storage.from('song-gifts')
 export const audioTypes = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' }
 export const maxAudioBytes = 6 * 1024 * 1024
 
-function validateAudio(source, objectUrl = false) {
+function validateAudio(source, objectUrl = false, expectedDuration) {
   return new Promise((resolve, reject) => {
     const audio = new Audio()
     const finish = (error) => {
@@ -19,21 +20,35 @@ function validateAudio(source, objectUrl = false) {
     }
     const timer = setTimeout(() => finish('读取音频超时，请换一个链接或直接上传文件。'), 8000)
     audio.preload = 'metadata'
-    audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) && audio.duration > 0 ? null : '请选择一首可播放的音频。')
+    audio.onloadedmetadata = () => {
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) return finish('请选择一首可播放的音频。')
+      if (expectedDuration && Math.abs(audio.duration - expectedDuration) > 4) {
+        return finish('文件时长与这个版本不符，请选择完整音频。')
+      }
+      finish()
+    }
     audio.onerror = () => finish('无法播放这段音频。请使用音频直链或上传文件，音乐平台的分享页面不能直接播放。')
     audio.src = source
   })
 }
 
-export async function sendSongGift({ pair, userId, file, link }) {
-  const id = crypto.randomUUID()
+export async function sendSongGift({ pair, userId, file, link, catalogTrack }) {
+  const id = catalogTrack ? await catalogGiftId(pair.id, userId, catalogTrack.id) : crypto.randomUUID()
+  const fields = 'id,title,audio_url,storage_path,created_at'
+  const lookup = () => supabase.from('song_gifts').select(fields).eq('id', id)
+    .eq('sender_id', userId).maybeSingle().abortSignal(AbortSignal.timeout(8000))
+  if (catalogTrack) {
+    const { data, error } = await lookup()
+    if (error) throw error
+    if (data) return data
+  }
   const gift = { id, pair_id: pair.id, sender_id: userId, audio_url: null, storage_path: null }
   if (file) {
     const extension = file.name.toLowerCase().split('.').pop()
     const contentType = audioTypes[extension]
     if (!Object.hasOwn(audioTypes, extension)) throw new Error('请选择 MP3、M4A、WAV 或 OGG 文件。')
     if (!file.size || file.size > maxAudioBytes) throw new Error('音频文件须大于 0 且不超过 6 MB。')
-    await validateAudio(URL.createObjectURL(file), true)
+    await validateAudio(URL.createObjectURL(file), true, catalogTrack?.expectedDuration)
     gift.storage_path = `${pair.id}/${userId}/${id}.${extension}`
     gift.title = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 200) || null
     const { error } = await bucket.upload(gift.storage_path, file, { contentType })
@@ -48,8 +63,15 @@ export async function sendSongGift({ pair, userId, file, link }) {
     gift.audio_url = url.href
   }
   const { data, error, status } = await supabase.from('song_gifts').insert(gift)
-    .select('id,title,audio_url,storage_path,created_at').single().abortSignal(AbortSignal.timeout(12000))
+    .select(fields).single().abortSignal(AbortSignal.timeout(12000))
   if (error) {
+    if (catalogTrack && error.code === '23505') {
+      const recovered = await lookup()
+      if (recovered.data) {
+        if (gift.storage_path !== recovered.data.storage_path) await bucket.remove([gift.storage_path]).catch(() => {})
+        return recovered.data
+      }
+    }
     if (gift.storage_path && status >= 400 && status < 500) {
       await bucket.remove([gift.storage_path]).catch(() => {})
     }

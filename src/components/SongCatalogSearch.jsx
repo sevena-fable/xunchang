@@ -56,7 +56,7 @@ export default function SongCatalogSearch({ pair, search, add, upload, disabled,
       {state?.songs?.length === 0 && <p role="status" className="text-xs text-[var(--panel-muted)]">没有找到歌曲，试试歌名或歌手名。</p>}
       {state?.songs?.length > 0 && <ul aria-label="搜歌结果" className="thin-scroll max-h-56 divide-y divide-[var(--panel-soft)] overflow-y-auto rounded-lg border border-[var(--panel-border)] px-2">
         {state.songs.map((song) => {
-          const saved = savedSongs.some((item) => item.id === added.get(song.id))
+          const saved = savedSongs.some((item) => item.id === (song.savedId || added.get(song.id)))
           const sourceError = unavailable.get(song.id)
           return (
           <li key={song.id} className="flex items-center gap-2 py-2 pl-1">
