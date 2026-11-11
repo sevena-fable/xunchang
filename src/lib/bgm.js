@@ -4,16 +4,23 @@ const defaultSource = '/bgm.mp3'
 let audio = null
 let playing = false
 let request = 0
+let playlist = [defaultSource]
+let track = 0
 const listeners = new Set()
 
-function ensure(source) {
-  if (audio?.getAttribute('src') === source) return audio
-  stopBgm()
-  audio = new Audio(source)
-  audio.loop = true
+function ensure() {
+  if (audio) return audio
+  audio = new Audio()
   audio.volume = 0.32
   const current = audio
-  audio.addEventListener('error', () => { if (audio === current) setPlaying(false) })
+  audio.addEventListener('ended', () => {
+    if (audio === current && playing && current.ended && playlist.length > 1) {
+      playTrack((track + 1) % playlist.length)
+    }
+  })
+  audio.addEventListener('error', () => {
+    if (audio === current && playing && current.error) setPlaying(false)
+  })
   return audio
 }
 
@@ -23,16 +30,30 @@ function setPlaying(next) {
   listeners.forEach((listener) => listener())
 }
 
-export async function startBgm(source = audio?.getAttribute('src') || defaultSource) {
-  const a = ensure(source)
+export function startBgm(source) {
+  if (source !== undefined) {
+    playlist = Array.isArray(source) ? source : [source]
+    track = 0
+  }
+  return playTrack(track)
+}
+
+async function playTrack(index, remaining = playlist.length) {
+  const a = ensure()
   const token = ++request
-  a.currentTime = 0
+  track = index
+  a.loop = playlist.length === 1
+  const source = playlist[index]
+  if (a.getAttribute('src') !== source) a.src = source
+  else a.currentTime = 0
   setPlaying(true)
   try {
     await a.play()
     return token === request
   } catch {
-    if (token === request) setPlaying(false)
+    if (token !== request) return false
+    if (a.error && remaining > 1) return playTrack((index + 1) % playlist.length, remaining - 1)
+    setPlaying(false)
     return false
   }
 }
@@ -50,6 +71,8 @@ export function resetBgm() {
   audio?.removeAttribute('src')
   audio?.load()
   audio = null
+  playlist = [defaultSource]
+  track = 0
 }
 
 export function toggleBgm() {

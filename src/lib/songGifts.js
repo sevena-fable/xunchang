@@ -55,21 +55,36 @@ export async function sendSongGift({ pair, userId, file, link }) {
   }
 }
 
-export async function loadSongGift(pairId, partnerId, signal) {
-  const { data, error } = await supabase.from('song_gifts')
-    .select('id,created_at,audio_url,storage_path').eq('pair_id', pairId).eq('sender_id', partnerId)
-    .is('seen_at', null).order('created_at', { ascending: false }).order('id', { ascending: false })
-    .limit(1).maybeSingle().abortSignal(signal)
-  if (error) throw error
-  if (!data || data.audio_url) return data
-  const { data: signed, error: signingError } = await bucket.createSignedUrl(data.storage_path, 60 * 60 * 12)
-  return { ...data, audio_url: signingError ? null : signed.signedUrl }
+const pageSize = 100
+
+export async function loadSongGifts(pairId, partnerId, signal) {
+  const gifts = []
+  while (true) {
+    const query = supabase.from('song_gifts')
+      .select('id,created_at,audio_url,storage_path').eq('pair_id', pairId).eq('sender_id', partnerId)
+      .is('seen_at', null).order('created_at').order('id').limit(pageSize).abortSignal(signal)
+    const last = gifts.at(-1)
+    if (last) query.or(`created_at.gt.${last.created_at},and(created_at.eq.${last.created_at},id.gt.${last.id})`)
+    const { data, error } = await query
+    if (error) throw error
+    gifts.push(...data)
+    if (data.length < pageSize) break
+  }
+
+  const paths = gifts.flatMap((gift) => gift.storage_path ? [gift.storage_path] : [])
+  const urls = new Map()
+  for (let index = 0; index < paths.length && !signal.aborted; index += pageSize) {
+    const { data } = await bucket.createSignedUrls(paths.slice(index, index + pageSize), 60 * 60 * 12)
+    for (const item of data || []) if (item.signedUrl) urls.set(item.path, item.signedUrl)
+  }
+  return gifts.map((gift) => ({ id: gift.id, url: gift.audio_url || urls.get(gift.storage_path) }))
 }
 
-export async function acknowledgeSongGift(pairId, partnerId, gift) {
-  const { error } = await supabase.from('song_gifts').update({ seen_at: new Date().toISOString() })
-    .eq('pair_id', pairId).eq('sender_id', partnerId).is('seen_at', null)
-    .or(`created_at.lt.${gift.created_at},and(created_at.eq.${gift.created_at},id.lte.${gift.id})`)
-    .abortSignal(AbortSignal.timeout(8000))
-  if (error) throw error
+export async function acknowledgeSongGifts(pairId, partnerId, ids) {
+  for (let index = 0; index < ids.length; index += pageSize) {
+    const { error } = await supabase.from('song_gifts').update({ seen_at: new Date().toISOString() })
+      .eq('pair_id', pairId).eq('sender_id', partnerId).is('seen_at', null)
+      .in('id', ids.slice(index, index + pageSize)).abortSignal(AbortSignal.timeout(8000))
+    if (error) throw error
+  }
 }

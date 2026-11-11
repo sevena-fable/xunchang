@@ -40,7 +40,7 @@ before(async () => {
 })
 after(async () => { await browser?.close(); server?.kill() })
 
-test('settings accepts a dropped link and a picked audio file; the next visit can hear or skip the gift', { skip: PRODUCTION, timeout: 40000 }, async () => {
+test('settings accepts song gifts and entry music loops one song or a playlist', { skip: PRODUCTION, timeout: 40000 }, async () => {
   const context = await browser.newContext({ viewport: { width: 1366, height: 768 } })
   try {
     const page = await context.newPage()
@@ -53,8 +53,13 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
     await page.addInitScript(({ user, token, expiry }) => {
       localStorage.setItem('sb-song-test-auth-token', JSON.stringify({ user, access_token: token, refresh_token: 'mock', expires_at: expiry }))
       window.playedSources = []
+      window.loopFlags = []
       const play = HTMLMediaElement.prototype.play
-      HTMLMediaElement.prototype.play = function () { window.playedSources.push(this.src); return play.call(this) }
+      HTMLMediaElement.prototype.play = function () {
+        window.playedSources.push(this.src)
+        window.loopFlags.push(this.loop)
+        return play.call(this)
+      }
     }, { user, token, expiry })
     const wave = Buffer.alloc(44 + 16000)
     wave.write('RIFF'); wave.writeUInt32LE(wave.length - 8, 4); wave.write('WAVEfmt ', 8)
@@ -63,7 +68,9 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
     wave.writeUInt16LE(16, 34); wave.write('data', 36); wave.writeUInt32LE(wave.length - 44, 40)
     const link = 'https://audio.example.test/demo.wav'
     await page.route(link, (route) => route.fulfill({ body: wave, contentType: 'audio/wav' }))
-    let incoming = null
+    const signedPath = '/object/sign/song-gifts/demo.wav?token=test'
+    const signedLink = `${MOCK_SUPABASE}/storage/v1${signedPath}`
+    let incoming = []
     const sent = []
     const uploaded = []
     let acknowledgements = 0
@@ -73,8 +80,9 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
       const json = (value) => route.fulfill({ json: value })
       if (url.pathname.endsWith('/profiles')) return json([{ id: a, nickname: url.searchParams.get('id') === `eq.${b}` ? '阿灰' : '小寻' }])
       if (url.pathname.endsWith('/pairs')) return json([pair])
-      if (url.pathname.includes('/storage/v1/object/sign/song-gifts/')) {
-        return json({ signedURL: '/object/sign/song-gifts/demo.wav?token=test' })
+      if (request.url() === signedLink) return route.fulfill({ body: wave, contentType: 'audio/wav' })
+      if (url.pathname === '/storage/v1/object/sign/song-gifts') {
+        return json(request.postDataJSON().paths.map((path) => ({ path, signedURL: signedPath })))
       }
       if (url.pathname.includes('/storage/v1/object/song-gifts/')) {
         uploaded.push(url.pathname)
@@ -82,8 +90,13 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
       }
       if (url.pathname.endsWith('/song_gifts')) {
         if (request.method() === 'POST') { sent.push(request.postDataJSON()); return route.fulfill({ status: 201 }) }
-        if (request.method() === 'PATCH') { acknowledgements++; incoming = null; return route.fulfill({ status: 204 }) }
-        return json(incoming ? [incoming] : [])
+        if (request.method() === 'PATCH') {
+          const ids = url.searchParams.get('id')
+          acknowledgements++
+          incoming = incoming.filter((gift) => !ids.includes(gift.id))
+          return route.fulfill({ status: 204 })
+        }
+        return json(incoming)
       }
       return json([])
     })
@@ -108,7 +121,9 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
     await page.getByRole('button', { name: '留下这首歌' }).click()
     await expect.poll(() => sent.length).toBe(2)
     assert.ok(uploaded[0].endsWith(sent[1].storage_path))
-    incoming = { id: sent[0].id, created_at: new Date().toISOString(), audio_url: link }
+    const first = { id: sent[0].id, created_at: new Date().toISOString(), audio_url: link }
+    const second = { id: sent[1].id, created_at: new Date().toISOString(), storage_path: sent[1].storage_path }
+    incoming = [first]
     await page.reload()
     await expect(prompt.getByText('阿灰给你留了一首歌，现在要听吗？')).toBeVisible()
     assert.deepEqual(await page.evaluate(() => window.playedSources), [])
@@ -116,12 +131,20 @@ test('settings accepts a dropped link and a picked audio file; the next visit ca
     await expect(prompt).toBeHidden()
     await expect.poll(() => acknowledgements).toBe(1)
     assert.deepEqual(await page.evaluate(() => window.playedSources), [link])
-    incoming = { id: sent[1].id, created_at: new Date().toISOString(), storage_path: sent[1].storage_path }
+    assert.deepEqual(await page.evaluate(() => window.loopFlags), [true])
+    incoming = [first, second]
+    await page.reload()
+    await expect(prompt.getByText('阿灰给你留了2首歌，现在要听吗？')).toBeVisible()
+    await prompt.getByRole('button', { name: '听这些歌' }).click()
+    await expect.poll(() => page.evaluate(() => window.playedSources.slice(0, 3))).toEqual([link, signedLink, link])
+    assert.deepEqual(await page.evaluate(() => window.loopFlags.slice(0, 3)), [false, false, false])
+    assert.deepEqual(incoming, [])
+    incoming = [second]
     await page.reload()
     await expect(prompt.getByText('阿灰给你留了一首歌，现在要听吗？')).toBeVisible()
     await expect(prompt.getByRole('button', { name: '听这首' })).toBeEnabled()
     await prompt.getByRole('button', { name: '先不听' }).click()
-    await expect.poll(() => acknowledgements).toBe(2)
+    await expect.poll(() => acknowledgements).toBe(3)
     assert.deepEqual(await page.evaluate(() => window.playedSources), [])
   } finally { await context.close() }
 })
