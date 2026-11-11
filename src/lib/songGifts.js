@@ -107,7 +107,11 @@ async function catalogRequest(path, options = {}) {
     headers: { ...options.headers, Authorization: `Bearer ${token}` },
   })
   const result = await response.json().catch(() => null)
-  if (!response.ok || !result) throw new Error(result?.error || '搜歌服务暂时不可用，请稍后重试。')
+  if (!response.ok || !result) {
+    const error = new Error(result?.error || '搜歌服务暂时不可用，请稍后重试。')
+    error.code = result?.code
+    throw error
+  }
   return result
 }
 

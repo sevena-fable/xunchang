@@ -87,6 +87,7 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
 
   async function addFromCatalog(track) {
     let saved
+    let sourceError
     const success = await runAction(async () => {
       setCatalogError('')
       setCatalogPending(track.id)
@@ -95,8 +96,26 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
         saved = await actions.addFromCatalog(pair, track)
         setSongs((current) => current.some((item) => item.id === saved.id) ? current : [...current, saved])
       } catch (error) {
+        if (error.code === 'SOURCE_UNAVAILABLE') { sourceError = error.message; throw error }
         setCatalogError(error.name === 'TimeoutError' ? '保存超时，请重新点击添加。' : error.message)
         throw error
+      } finally {
+        setCatalogPending(null)
+        setPending('')
+      }
+    }, '已添加到留歌列表')
+    return { saved: success ? saved : null, sourceError }
+  }
+
+  async function uploadCatalogFile(track, file) {
+    let saved
+    const success = await runAction(async () => {
+      setCatalogError('')
+      setCatalogPending(track.id)
+      setPending(file.name)
+      try {
+        saved = await actions.send({ file, pair, userId })
+        setSongs((current) => [...current, saved])
       } finally {
         setCatalogPending(null)
         setPending('')
@@ -108,7 +127,7 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
   return (
     <div className="panel-box my-5 space-y-3 px-4 py-3 text-sm">
       <h4 className="font-semibold">给对方留一首歌</h4>
-      <SongCatalogSearch pair={pair} search={actions.search} add={addFromCatalog} disabled={disabled}
+      <SongCatalogSearch pair={pair} search={actions.search} add={addFromCatalog} upload={uploadCatalogFile} disabled={disabled}
         pending={catalogPending} savedSongs={songs} />
       {catalogError && <p role="alert" className="text-xs">{catalogError}</p>}
       <div

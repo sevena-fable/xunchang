@@ -164,6 +164,10 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
           { id: '58527', title: '想自由(Live)', artist: '林宥嘉', date: '2013-07-05' },
         ] } })
       }
+      const { track } = request.postDataJSON()
+      if (track === '511') return route.fulfill({ status: 422, json: {
+        code: 'SOURCE_UNAVAILABLE', error: '曲库只提供了这个版本的试听片段。',
+      } })
       assert.deepEqual(request.postDataJSON(), { pair: pair.id, track: '58527' })
       return route.fulfill({ json: { song: { id: a, title: '想自由(Live) · 林宥嘉' } } })
     })
@@ -171,6 +175,13 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     await page.getByRole('button', { name: '搜索', exact: true }).click()
     const results = page.getByRole('list', { name: '搜歌结果' })
     await expect(results.getByText('想自由', { exact: true })).toBeVisible()
+    await results.getByRole('button', { name: '添加 想自由 · 林宥嘉', exact: true }).click()
+    await expect(results.getByText('曲库只提供了这个版本的试听片段。')).toBeVisible()
+    const fallbackPicker = page.waitForEvent('filechooser')
+    await results.getByRole('button', { name: '上传完整版 想自由 · 林宥嘉' }).click()
+    await (await fallbackPicker).setFiles({ name: '想自由-录音室版.wav', mimeType: 'audio/wav', buffer: wave })
+    await expect(list.getByText('想自由-录音室版')).toBeVisible()
+    await expect(results.getByRole('button', { name: '已添加 想自由 · 林宥嘉', exact: true })).toBeDisabled()
     await results.getByRole('button', { name: '添加 想自由(Live) · 林宥嘉' }).click()
     await expect(list.getByText('想自由(Live) · 林宥嘉')).toBeVisible()
     await expect(results.getByRole('button', { name: '已添加 想自由(Live) · 林宥嘉' })).toBeDisabled()

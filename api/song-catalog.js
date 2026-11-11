@@ -15,6 +15,8 @@ const storageLimit = 6 * 1024 * 1024
 const songIdPattern = /^\d{1,9}$/
 const uuidPattern = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i
 
+class SourceUnavailable extends Error {}
+
 function clean(html = '') {
   return decodeHTML(html.replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').trim()
 }
@@ -86,16 +88,16 @@ async function downloadTrack(id) {
   const artist = clean(html.match(/<div class="txt">\s*<a[^>]*>([\s\S]*?)<\/a>/i)?.[1])
   if (!title || !artist) throw new Error('找不到这首歌，请重新搜索。')
   let url
-  try { url = new URL(media.trim()) } catch { throw new Error('这个版本没有可用音源，请试试其他版本。') }
+  try { url = new URL(media.trim()) } catch { throw new SourceUnavailable('曲库没有提供这个版本的完整音频。') }
   if (url.protocol !== 'https:' || url.username || url.password || url.port || !/^[a-z\d-]+\.kuwo\.cn$/.test(url.hostname)) {
-    throw new Error('这个版本没有可用音源，请试试其他版本。')
+    throw new SourceUnavailable('曲库没有提供这个版本的完整音频。')
   }
   if (url.pathname.includes('/lx/resource/')) {
-    throw new Error('这个版本只有试听片段，请试试其他版本。')
+    throw new SourceUnavailable('曲库只提供了这个版本的试听片段。')
   }
 
   const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(15000) })
-  if (!response.ok) throw new Error('这个音源暂时无法下载，请试试其他版本。')
+  if (!response.ok) throw new SourceUnavailable('这个版本的音频暂时无法下载。')
   const input = await readBounded(response, 16 * 1024 * 1024)
   const format = audioFormat(input)
   const useM4a = format === 'aac' || format === 'mov'
@@ -119,7 +121,7 @@ async function downloadTrack(id) {
     }
     const size = (await stat(output)).size
     if (size >= storageLimit) throw new Error('这首歌超过 6 MB，请试试其他版本。')
-    if (size < 200000) throw new Error('这个音源太短，可能是试听片段，请试试其他版本。')
+    if (size < 200000) throw new SourceUnavailable('曲库返回的音频太短，可能是试听片段。')
     return { bytes: await readFile(output), title: `${title} · ${artist}`.slice(0, 200), extension, contentType }
   } finally {
     await rm(directory, { recursive: true, force: true })
@@ -188,6 +190,9 @@ export default async function handler(req, res) {
     if (typeof track !== 'string' || !songIdPattern.test(track)) return res.status(400).json({ error: '歌曲编号无效。' })
     return res.status(200).json({ song: await saveTrack(client, pairId, userId, track) })
   } catch (error) {
+    if (error instanceof SourceUnavailable) {
+      return res.status(422).json({ code: 'SOURCE_UNAVAILABLE', error: error.message })
+    }
     const message = /[\u4e00-\u9fff]/.test(error.message) ? error.message : '搜歌服务暂时不可用，请稍后重试。'
     return res.status(502).json({ error: message })
   }
