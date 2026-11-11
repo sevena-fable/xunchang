@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Panel, { GhostButton, PrimaryButton } from './Panel'
 import { resetBgm, startBgm } from '../lib/bgm'
-import { acknowledgeSongGifts, loadSongGifts } from '../lib/songGifts'
+import { loadSongGifts } from '../lib/songGifts'
 
 export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
   const [open, setOpen] = useState(true)
@@ -35,16 +35,10 @@ export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
   const count = gifts.length
   const unavailable = count - playable.length
   const sender = partnerNickname || '对方'
-  function finish(handled) {
-    setOpen(false)
-    acknowledgeSongGifts(pairId, partnerId, handled.map((gift) => gift.id)).catch(() => {
-      // Unacknowledged songs remain available on the next visit.
-    })
-  }
   function skip() {
     playback.current++
     resetBgm()
-    finish(gifts)
+    setOpen(false)
   }
   async function play(useGifts) {
     const token = ++playback.current
@@ -53,7 +47,7 @@ export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
     const started = await startBgm(useGifts ? playable.map((gift) => gift.url) : '/bgm.mp3')
     if (!active.current || token !== playback.current) return
     setStarting(false)
-    if (started) finish(useGifts ? playable : [])
+    if (started) setOpen(false)
     else {
       resetBgm()
       setPlayError(useGifts ? '暂时无法播放留歌，可以重试或播放原来的背景音乐。' : '音乐暂时无法播放，请重试。')

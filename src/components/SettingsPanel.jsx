@@ -3,7 +3,7 @@ import Panel, { PrimaryButton, GhostButton } from './Panel'
 import { toggleBgm, useBgmPlaying } from '../lib/bgm'
 import SongGiftForm from './SongGiftForm'
 
-export default function SettingsPanel({ open, onClose, profile, pair, partnerNickname, onSave, onLogout, onSendSong }) {
+export default function SettingsPanel({ open, onClose, profile, pair, partnerNickname, onSave, onLogout, songGiftActions }) {
   const bgmPlaying = useBgmPlaying()
   const [nickname, setNickname] = useState(profile.nickname || '')
   const [busy, setBusy] = useState(false)
@@ -47,7 +47,7 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
           </button>
         </p>
       </div>
-      {open && onSendSong && <SongGiftForm busy={busy} onSend={(input) => run(() => onSendSong(input), '已留歌，对方下次进入时会看到提示。')} />}
+      {open && songGiftActions && <SongGiftForm busy={busy} pair={pair} userId={profile.id} actions={songGiftActions} runAction={run} />}
       <p className="min-h-5 text-sm" role="status">{message}</p>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
         <button type="button" disabled={busy} onClick={() => run(onLogout, '已离开桌前')} className="panel-link text-xs">退出登录</button>

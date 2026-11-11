@@ -73,7 +73,7 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     let incoming = []
     const sent = []
     const uploaded = []
-    let acknowledgements = 0
+    let removals = 0
     await page.route(`${MOCK_SUPABASE}/**`, (route) => {
       const request = route.request()
       const url = new URL(request.url())
@@ -89,14 +89,19 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
         return json({ Key: url.pathname })
       }
       if (url.pathname.endsWith('/song_gifts')) {
-        if (request.method() === 'POST') { sent.push(request.postDataJSON()); return route.fulfill({ status: 201 }) }
-        if (request.method() === 'PATCH') {
+        if (request.method() === 'POST') {
+          const saved = { ...request.postDataJSON(), created_at: new Date().toISOString() }
+          sent.push(saved)
+          return json(saved)
+        }
+        if (request.method() === 'DELETE') {
           const ids = url.searchParams.get('id')
-          acknowledgements++
-          incoming = incoming.filter((gift) => !ids.includes(gift.id))
+          removals++
+          const index = sent.findIndex((song) => ids === `eq.${song.id}`)
+          if (index >= 0) sent.splice(index, 1)
           return route.fulfill({ status: 204 })
         }
-        return json(incoming)
+        return json(url.searchParams.get('sender_id') === `eq.${a}` ? sent : incoming)
       }
       return json([])
     })
@@ -105,22 +110,24 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     await expect(prompt.getByRole('button', { name: '播放', exact: true })).toBeEnabled()
     await prompt.getByRole('button', { name: '先不听' }).click()
     await page.getByRole('button', { name: '设置' }).click()
+    await expect(page.getByRole('button', { name: '选择音频文件' })).toBeEnabled()
     const drop = page.getByText('拖入音频文件或音频链接', { exact: true })
     await drop.dispatchEvent('drop', { dataTransfer: await page.evaluateHandle((url) => {
       const transfer = new DataTransfer()
       transfer.setData('text/uri-list', url)
       return transfer
     }, link) })
-    await expect(page.getByRole('textbox', { name: /音频直链/ })).toHaveValue(link)
-    await page.getByRole('button', { name: '留下这首歌' }).click()
-    await expect(page.getByText('已留歌，对方下次进入时会看到提示。')).toBeVisible()
+    const list = page.getByRole('list', { name: '已留的歌' })
+    await expect(list.getByText('demo.wav')).toBeVisible()
     assert.equal(sent[0].audio_url, link)
     const picker = page.waitForEvent('filechooser')
     await page.getByRole('button', { name: '选择音频文件' }).click()
     await (await picker).setFiles({ name: '测试.wav', mimeType: 'audio/wav', buffer: wave })
-    await page.getByRole('button', { name: '留下这首歌' }).click()
-    await expect.poll(() => sent.length).toBe(2)
+    await expect(list.getByText('测试', { exact: true })).toBeVisible()
     assert.ok(uploaded[0].endsWith(sent[1].storage_path))
+    await page.getByRole('dialog', { name: '设置' }).getByRole('button', { name: '关闭', exact: true }).last().click()
+    await page.getByRole('button', { name: '设置' }).click()
+    await expect(list.getByText('测试', { exact: true })).toBeVisible()
     const first = { id: sent[0].id, created_at: new Date().toISOString(), audio_url: link }
     const second = { id: sent[1].id, created_at: new Date().toISOString(), storage_path: sent[1].storage_path }
     incoming = [first]
@@ -129,7 +136,7 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     assert.deepEqual(await page.evaluate(() => window.playedSources), [])
     await prompt.getByRole('button', { name: '听这首' }).click()
     await expect(prompt).toBeHidden()
-    await expect.poll(() => acknowledgements).toBe(1)
+    assert.equal(incoming.length, 1)
     assert.deepEqual(await page.evaluate(() => window.playedSources), [link])
     assert.deepEqual(await page.evaluate(() => window.loopFlags), [true])
     incoming = [first, second]
@@ -138,14 +145,16 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     await prompt.getByRole('button', { name: '听这些歌' }).click()
     await expect.poll(() => page.evaluate(() => window.playedSources.slice(0, 3))).toEqual([link, signedLink, link])
     assert.deepEqual(await page.evaluate(() => window.loopFlags.slice(0, 3)), [false, false, false])
-    assert.deepEqual(incoming, [])
-    incoming = [second]
+    assert.equal(incoming.length, 2)
     await page.reload()
-    await expect(prompt.getByText('阿灰给你留了一首歌，现在要听吗？')).toBeVisible()
-    await expect(prompt.getByRole('button', { name: '听这首' })).toBeEnabled()
+    await expect(prompt.getByText('阿灰给你留了2首歌，现在要听吗？')).toBeVisible()
     await prompt.getByRole('button', { name: '先不听' }).click()
-    await expect.poll(() => acknowledgements).toBe(3)
+    assert.equal(incoming.length, 2)
     assert.deepEqual(await page.evaluate(() => window.playedSources), [])
+    await page.getByRole('button', { name: '设置' }).click()
+    await list.getByRole('button', { name: '移除 测试' }).click()
+    await expect(list.getByText('测试', { exact: true })).toHaveCount(0)
+    assert.equal(removals, 1)
   } finally { await context.close() }
 })
 

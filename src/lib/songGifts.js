@@ -35,6 +35,7 @@ export async function sendSongGift({ pair, userId, file, link }) {
     if (!file.size || file.size > maxAudioBytes) throw new Error('音频文件须大于 0 且不超过 6 MB。')
     await validateAudio(URL.createObjectURL(file), true)
     gift.storage_path = `${pair.id}/${userId}/${id}.${extension}`
+    gift.title = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 200) || null
     const { error } = await bucket.upload(gift.storage_path, file, { contentType })
     if (error) throw error
   } else {
@@ -46,23 +47,25 @@ export async function sendSongGift({ pair, userId, file, link }) {
     await validateAudio(url.href)
     gift.audio_url = url.href
   }
-  const { error, status } = await supabase.from('song_gifts').insert(gift).abortSignal(AbortSignal.timeout(12000))
+  const { data, error, status } = await supabase.from('song_gifts').insert(gift)
+    .select('id,title,audio_url,storage_path,created_at').single().abortSignal(AbortSignal.timeout(12000))
   if (error) {
     if (gift.storage_path && status >= 400 && status < 500) {
       await bucket.remove([gift.storage_path]).catch(() => {})
     }
     throw error
   }
+  return data
 }
 
 const pageSize = 100
 
-export async function loadSongGifts(pairId, partnerId, signal) {
+async function listSongGifts(pairId, senderId, signal, fields) {
   const gifts = []
   while (true) {
     const query = supabase.from('song_gifts')
-      .select('id,created_at,audio_url,storage_path').eq('pair_id', pairId).eq('sender_id', partnerId)
-      .is('seen_at', null).order('created_at').order('id').limit(pageSize).abortSignal(signal)
+      .select(fields).eq('pair_id', pairId).eq('sender_id', senderId)
+      .order('created_at').order('id').limit(pageSize).abortSignal(signal)
     const last = gifts.at(-1)
     if (last) query.or(`created_at.gt.${last.created_at},and(created_at.eq.${last.created_at},id.gt.${last.id})`)
     const { data, error } = await query
@@ -70,7 +73,22 @@ export async function loadSongGifts(pairId, partnerId, signal) {
     gifts.push(...data)
     if (data.length < pageSize) break
   }
+  return gifts
+}
 
+export function listOwnSongGifts(pair, userId, signal) {
+  return listSongGifts(pair.id, userId, signal, 'id,title,created_at,audio_url,storage_path')
+}
+
+export async function removeSongGift(pair, userId, gift) {
+  const { error } = await supabase.from('song_gifts').delete().eq('pair_id', pair.id)
+    .eq('sender_id', userId).eq('id', gift.id).abortSignal(AbortSignal.timeout(8000))
+  if (error) throw error
+  if (gift.storage_path) await bucket.remove([gift.storage_path]).catch(() => {})
+}
+
+export async function loadSongGifts(pairId, partnerId, signal) {
+  const gifts = await listSongGifts(pairId, partnerId, signal, 'id,created_at,audio_url,storage_path')
   const paths = gifts.flatMap((gift) => gift.storage_path ? [gift.storage_path] : [])
   const urls = new Map()
   for (let index = 0; index < paths.length && !signal.aborted; index += pageSize) {
@@ -80,11 +98,4 @@ export async function loadSongGifts(pairId, partnerId, signal) {
   return gifts.map((gift) => ({ id: gift.id, url: gift.audio_url || urls.get(gift.storage_path) }))
 }
 
-export async function acknowledgeSongGifts(pairId, partnerId, ids) {
-  for (let index = 0; index < ids.length; index += pageSize) {
-    const { error } = await supabase.from('song_gifts').update({ seen_at: new Date().toISOString() })
-      .eq('pair_id', pairId).eq('sender_id', partnerId).is('seen_at', null)
-      .in('id', ids.slice(index, index + pageSize)).abortSignal(AbortSignal.timeout(8000))
-    if (error) throw error
-  }
-}
+export const songGiftActions = { list: listOwnSongGifts, send: sendSongGift, remove: removeSongGift }
