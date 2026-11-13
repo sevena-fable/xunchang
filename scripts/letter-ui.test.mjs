@@ -36,7 +36,11 @@ before(async () => {
     server.once('error', reject)
     server.once('exit', (code) => { if (code) { clearTimeout(timer); reject(new Error(`测试服务器退出 ${code}`)) } })
   })
-  browser = await chromium.launch({ channel: process.env.BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined), headless: true })
+  browser = await chromium.launch({
+    channel: process.env.BROWSER_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
+    headless: true,
+    args: ['--enable-unsafe-swiftshader'],
+  })
 })
 after(async () => { await browser?.close(); server?.kill() })
 
@@ -153,6 +157,12 @@ test('settings accepts song gifts and entry music loops one song or a playlist',
     await prompt.getByRole('button', { name: '先不听' }).click()
     assert.equal(incoming.length, 2)
     assert.deepEqual(await page.evaluate(() => window.playedSources), [])
+    await walkToDesk(page)
+    const deferredPlayer = page.getByRole('button', { name: '唱片播放器' })
+    await deferredPlayer.click()
+    await expect.poll(() => page.evaluate(() => window.playedSources.slice(0, 2))).toEqual([link, signedLink])
+    await deferredPlayer.click()
+    await expect(deferredPlayer).toHaveAttribute('aria-pressed', 'false')
     await page.getByRole('button', { name: '设置' }).click()
     await list.getByRole('button', { name: '移除 测试' }).click()
     await expect(list.getByText('测试', { exact: true })).toHaveCount(0)
@@ -202,10 +212,13 @@ async function preview(viewport = { width: 1366, height: 768 }) {
 }
 async function writer(page) {
   await page.bringToFront()
-  await page.getByRole('button', { name: '给你看看', exact: true }).waitFor()
+  const paper = page.getByRole('button', { name: '给你看看', exact: true })
+  const enter = page.getByRole('button', { name: '进屋', exact: true })
+  await paper.or(enter).first().waitFor()
   const prompt = page.getByRole('dialog', { name: '背景音乐', exact: true })
   if (await prompt.isVisible()) await prompt.getByRole('button', { name: '先不听', exact: true }).click()
-  await page.getByRole('button', { name: '给你看看', exact: true }).click()
+  if (await enter.isVisible()) await walkToDesk(page)
+  await paper.click()
   await expect(page.getByRole('textbox', { name: '分享正文' })).toBeEnabled()
   await page.evaluate(() => document.fonts.ready)
   return page.getByRole('textbox', { name: '分享正文' })
@@ -1882,8 +1895,8 @@ const ME = '11111111-1111-1111-1111-111111111111'
 const YOU = '22222222-2222-2222-2222-222222222222'
 const PAIR = '33333333-3333-3333-3333-333333333333'
 
-async function live() {
-  const context = await browser.newContext({ viewport: { width: 1366, height: 900 } })
+async function live({ startAtDesk = true, reducedMotion = 'no-preference' } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1366, height: 900 }, reducedMotion })
   const page = await context.newPage()
   const user = { id: ME, aud: 'authenticated', role: 'authenticated', email: 'test@example.com', user_metadata: { nickname: '测试' } }
   const state = { letters: [], reactions: [], annotationReplies: [], reactionReplies: 0, requests: [], sockets: [], errors: [], unexpected: [], inserts: 0, reject: false, loseResponse: false, obscure: false, profileError: false }
@@ -1972,9 +1985,107 @@ async function live() {
       }, token)
     }
     await dismissBgmPrompt(page, choice)
+    if (startAtDesk && await page.locator('[data-cabin-view="outside"]').isVisible()) await walkToDesk(page)
   }
   return { context, page, state, login }
 }
+
+async function walkToDesk(page) {
+  await page.getByRole('button', { name: '进屋', exact: true }).click()
+  await page.getByRole('button', { name: '走到桌前', exact: true }).click()
+}
+
+test('forest cabin connects outdoor mailbox, indoor desk, writing and calendar', { timeout: 60000 }, async () => {
+  const { context, page, state, login } = await live({ startAtDesk: false, reducedMotion: 'no-preference' })
+  try {
+    state.letters.push({ id: '44444444-4444-4444-4444-444444444444', pair_id: PAIR, sender_id: YOU,
+      status: 'delivered', stationery: 'cream', content: '窗外的风把信送到了。', images: [], sealed_at: new Date().toISOString() })
+    await login()
+    const cabin = page.locator('.cabin-shell')
+    await expect(cabin).toHaveAttribute('data-cabin-view', 'outside')
+    await expect(cabin).toHaveAttribute('data-cabin-status', 'ready')
+    const world = page.locator('.cabin-world')
+    await expect(world).toHaveAttribute('data-materials', 'ready')
+    await expect(world).toHaveAttribute('data-pigeon', 'perched')
+    await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeHidden()
+    const door = page.getByRole('button', { name: '进屋', exact: true })
+    const original = await door.evaluate((element) => element.style.left)
+    await page.getByRole('button', { name: '向左转' }).click()
+    await expect.poll(() => door.evaluate((element) => element.style.left)).not.toBe(original)
+    await page.getByRole('button', { name: '拉近' }).click()
+    await page.getByRole('button', { name: '重置视角' }).click()
+    await page.getByRole('button', { name: '信箱，1 条未读内容' }).click()
+    await page.getByRole('dialog', { name: '屋外信箱' }).getByRole('button', { name: /窗外的风/ }).click()
+    await expect(page.locator('.paper-reading')).toHaveText('窗外的风把信送到了。')
+    await expect.poll(() => state.letters[0].status).toBe('read')
+    await page.getByRole('button', { name: '关闭信纸' }).click()
+    await expect(page.getByRole('button', { name: '信箱', exact: true })).toBeVisible()
+    await expect(world).toHaveAttribute('data-pigeon', 'away')
+    await door.focus()
+    await page.keyboard.press('Enter')
+    await expect(cabin).toHaveAttribute('data-cabin-view', 'inside')
+    await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeHidden()
+    await expect(page.getByRole('button', { name: '走到桌前' })).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(cabin).toHaveAttribute('data-cabin-view', 'desk')
+    await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeFocused()
+    const input = await writer(page)
+    await input.fill('今晚窗边见。')
+    await page.getByRole('button', { name: '分享给对方', exact: true }).click()
+    await expect.poll(() => state.letters.some((item) => item.content === '今晚窗边见。')).toBe(true)
+    const composer = page.getByRole('dialog', { name: '给你看看' })
+    await expect(composer.getByText('对方可以看到了', { exact: true })).toBeVisible()
+    await composer.getByRole('button', { name: '关闭信纸' }).click()
+    await page.getByRole('button', { name: '台历', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: '台 历' })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: /返回客厅/ }).click()
+    await page.getByRole('button', { name: /回到屋外/ }).click()
+    await expect(cabin).toHaveAttribute('data-cabin-view', 'outside')
+    await expect(door).toBeVisible()
+    assert.deepEqual(state.errors, [])
+  } finally { await context.close() }
+})
+
+test('portrait cabin keeps the mailbox and desk available without WebGL', { skip: PRODUCTION, timeout: 30000 }, async () => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 740 }, hasTouch: true })
+  try {
+    const page = await context.newPage()
+    await page.addInitScript(() => {
+      const getContext = HTMLCanvasElement.prototype.getContext
+      HTMLCanvasElement.prototype.getContext = function (type, ...options) {
+        return type.includes('webgl') ? null : getContext.call(this, type, ...options)
+      }
+    })
+    await page.goto(BASE + '/preview.html?cabin=1')
+    const cabin = page.locator('.cabin-shell')
+    const still = page.locator('.cabin-still')
+    await expect(cabin).toHaveAttribute('data-cabin-status', 'fallback')
+    await expect(still).toHaveCSS('background-image', /outside-portrait\.webp/)
+    await expect(page.getByRole('navigation', { name: '视角控制' })).toBeHidden()
+    const mailbox = page.getByRole('button', { name: /信箱，2 条未读内容/ })
+    await mailbox.tap()
+    await page.getByRole('dialog', { name: '屋外信箱' }).getByRole('button', { name: /采菊东篱下/ }).tap()
+    const letter = page.getByRole('dialog', { name: '查看内容' })
+    await expect(letter.getByText('请在电脑上打开寻常，展开完整信纸。')).toBeVisible()
+    await expect(letter.getByText(/F11/)).toBeHidden()
+    await letter.getByRole('button', { name: '收起' }).tap()
+    await expect(mailbox).toBeVisible()
+    await page.getByRole('button', { name: '进屋' }).tap()
+    await expect(still).toHaveCSS('background-image', /inside-portrait\.webp/)
+    await page.getByRole('button', { name: '走到桌前' }).tap()
+    await expect(still).toHaveCSS('background-image', /desk-portrait\.webp/)
+    await expect(page.getByRole('button', { name: '给你看看' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '唱片播放器' })).toBeVisible()
+    for (const level of ['outside', 'inside', 'desk']) {
+      const image = await page.request.get(`${BASE}/cabin/${level}-portrait.webp`)
+      expect(image.ok()).toBe(true)
+      expect(image.headers()['content-type']).toContain('image/webp')
+    }
+    await page.getByRole('button', { name: /台历/ }).tap()
+    await expect(page.getByRole('dialog', { name: '台 历' })).toBeVisible()
+  } finally { await context.close() }
+})
 
 async function dismissBgmPrompt(page, choice) {
   const prompt = page.getByRole('dialog', { name: '背景音乐', exact: true })
@@ -2354,7 +2465,7 @@ test('successful reactions do not clear a content loading failure', { timeout: 3
 })
 
 test('entry prompt starts background music and the speaker mutes from the beginning', { timeout: 30000 }, async () => {
-  const { context, page, state, login } = await live()
+  const { context, page, state, login } = await live({ startAtDesk: false, reducedMotion: 'no-preference' })
   try {
     await page.evaluate(() => {
       window.__bgm = { plays: 0, element: null }
@@ -2367,14 +2478,15 @@ test('entry prompt starts background music and the speaker mutes from the beginn
     })
     await login('播放')
     await expect(page.getByRole('dialog', { name: '背景音乐', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '唱片播放器' })).toBeHidden()
+    await walkToDesk(page)
     const turntable = page.getByRole('button', { name: '唱片播放器' })
-    const disc = turntable.locator('.desk-turntable-disc')
     await expect(turntable).toHaveAttribute('aria-pressed', 'true')
-    await expect(disc).toHaveCSS('animation-play-state', 'running')
     await turntable.click()
-    await expect(disc).toHaveCSS('animation-play-state', 'paused')
+    await expect(turntable).toHaveAttribute('aria-pressed', 'false')
+    await expect.poll(async () => (await audio()).paused).toBe(true)
     await turntable.click()
-    await expect(disc).toHaveCSS('animation-play-state', 'running')
+    await expect(turntable).toHaveAttribute('aria-pressed', 'true')
     await expect.poll(async () => (await audio()).paused).toBe(false)
     assert.deepEqual(await audio().then(({ plays, src, loop }) => ({ plays, src, loop })), { plays: 2, src: '/bgm.mp3', loop: true })
     await page.getByRole('button', { name: '设置', exact: true }).click()
@@ -2411,7 +2523,7 @@ test('valid recovery saves the new password before returning home', { timeout: 3
     await expect(page.getByText('新密码已保存')).toBeVisible()
     assert.equal(state.requests.filter((item) => item.path === '/auth/v1/user' && item.method === 'PUT').length, 1)
     await page.getByRole('button', { name: '返回首页', exact: true }).click()
-    await expect(page.getByRole('button', { name: '给你看看' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '进屋' })).toBeVisible()
     assert.equal(new URL(page.url()).search, '')
     assert.deepEqual(state.unexpected, [])
     assert.deepEqual(state.errors, [])
@@ -2450,7 +2562,7 @@ for (const stage of ['profile creation', 'profile reread', 'partner nickname']) 
       await page.unroute('**/rest/v1/profiles?**', handler)
       release()
       await page.getByRole('button', { name: '重试', exact: true }).click()
-      await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: '进屋', exact: true })).toBeVisible()
       assert.deepEqual(state.unexpected, [])
       assert.deepEqual(state.errors, [])
     } finally { release(); await context.close() }
@@ -2593,7 +2705,7 @@ for (const action of ['create', 'join']) {
         await expect(page.getByText(pair.invite_code, { exact: true })).toBeVisible()
         pair = { ...pair, user_b: YOU, status: 'paired' }
       }
-      await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeVisible({ timeout: 8000 })
+      await expect(page.getByRole('button', { name: '进屋', exact: true })).toBeVisible({ timeout: 8000 })
       assert.equal(attempts, 2)
       assert.deepEqual(state.unexpected, [])
       assert.deepEqual(state.errors, [])
@@ -2651,7 +2763,7 @@ test('profile read failure is retryable and never creates a replacement profile'
     assert.equal(state.requests.some((item) => item.path === '/rest/v1/profiles' && item.method !== 'GET'), false)
     state.profileError = false
     await page.getByRole('button', { name: '重试', exact: true }).click()
-    await expect(page.getByRole('button', { name: '给你看看' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '进屋' })).toBeVisible()
     assert.deepEqual(state.unexpected, [])
     assert.deepEqual(state.errors, [])
   } finally { await context.close() }
@@ -2778,7 +2890,7 @@ for (const failure of [
       state.authError = null
       state.authNetworkError = false
       await page.getByRole('button', { name: '登录', exact: true }).click()
-      await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: '进屋', exact: true })).toBeVisible()
       const requests = state.requests.filter((item) => item.path === '/auth/v1/token')
       assert.equal(requests.length, 2)
       assert.equal(requests[1].body.email, 'test@example.com')
@@ -2851,7 +2963,7 @@ test('login prevents repeated submissions while authenticating', { timeout: 3000
     await page.locator('form').dispatchEvent('submit')
     assert.equal(state.requests.filter((item) => item.path === '/auth/v1/token').length, 1)
     release()
-    await expect(page.getByRole('button', { name: '给你看看', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '进屋', exact: true })).toBeVisible()
     assert.equal(state.requests.filter((item) => item.path === '/auth/v1/token').length, 1)
     assert.deepEqual(state.unexpected, [])
     assert.deepEqual(state.errors, [])

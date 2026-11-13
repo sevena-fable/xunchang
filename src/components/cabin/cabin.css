@@ -1,0 +1,177 @@
+.cabin-shell {
+  --still-width: min(100vw, 160dvh);
+  --still-height: min(100dvh, 62.5vw);
+  position: fixed;
+  inset: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: #435541;
+  color: #fff5df;
+}
+.cabin-world, .cabin-still, .cabin-objects {
+  position: absolute;
+  inset: 0;
+}
+.cabin-world > canvas {
+  position: absolute;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+.cabin-world > canvas[data-dragging="true"] { cursor: grabbing; }
+[data-cabin-view="desk"] .cabin-world > canvas { cursor: default; }
+[data-cabin-view="outside"] { --cabin-still: url('/cabin/outside.webp'); }
+[data-cabin-view="inside"] { --cabin-still: url('/cabin/inside.webp'); }
+[data-cabin-view="desk"] { --cabin-still: url('/cabin/desk.webp'); }
+.cabin-shell:not([data-cabin-status="ready"])::before {
+  content: '';
+  position: absolute;
+  inset: -1.5rem;
+  background: var(--cabin-still) center / cover;
+  filter: blur(18px) brightness(.66);
+}
+.cabin-shell:not([data-cabin-status="ready"]) .cabin-world {
+  margin: auto;
+  width: var(--still-width);
+  height: var(--still-height);
+}
+.cabin-still { background: var(--cabin-still) center / 100% 100% no-repeat; }
+.cabin-objects { pointer-events: none; z-index: 2; }
+.cabin-object-label, .cabin-header button, .cabin-controls button, .cabin-settings {
+  border: 1px solid #f8ebcb70;
+  background: #302c20e8;
+  color: #fff5df;
+  cursor: pointer;
+}
+.cabin-object:hover .cabin-object-label, .cabin-header button:hover, .cabin-controls button:hover, .cabin-settings:hover { background: #4d4834; }
+.cabin-object:focus-visible, .cabin-header button:focus-visible, .cabin-controls button:focus-visible, .cabin-settings:focus-visible {
+  outline: 2px solid #fff1c9;
+  outline-offset: 3px;
+}
+.cabin-object {
+  position: absolute;
+  pointer-events: auto;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: var(--hit-width, auto);
+  height: max(44px, var(--hit-height, 0px));
+  min-width: max-content;
+  border-radius: .6rem;
+  cursor: pointer;
+}
+.cabin-object:hover { background: #fff0cf13; }
+.cabin-object-label {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .2rem .5rem;
+  min-height: 24px;
+  border-radius: 2rem;
+  white-space: nowrap;
+  font-size: .75rem;
+  line-height: 1.35;
+  box-shadow: 0 2px 8px #161b1350;
+}
+.cabin-object-mailbox .cabin-object-label {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.cabin-object-mailbox { min-width: 44px; }
+.cabin-object[hidden], .cabin-world[data-moving="true"] .cabin-object { display: none; }
+.cabin-shell:has(.cabin-world[data-moving="true"]) .cabin-header button { visibility: hidden; }
+.cabin-object-door { top: 59.5%; left: 48.3%; }
+.cabin-object-mailbox { top: 72%; left: 54%; }
+.cabin-object-desk { top: 57%; left: 77%; }
+.cabin-object-paper { top: 71%; left: 52%; }
+.cabin-object-calendar { top: 48%; left: 17%; }
+.cabin-object-turntable { top: 53.5%; left: 81%; }
+.cabin-music-state { color: #e8c393; font-size: .7rem; }
+.cabin-object-count {
+  display: grid;
+  place-items: center;
+  min-width: 1rem;
+  height: 1rem;
+  border-radius: 1rem;
+  padding: 0 .2rem;
+  color: #332415;
+  background: #ffcf80;
+  font: 600 .65rem system-ui, sans-serif;
+}
+.cabin-header {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+  top: 1.1rem;
+  left: 1.1rem;
+  max-width: calc(100% - 4.25rem);
+  padding: .34rem .65rem;
+  border-radius: .75rem;
+  background: #282b20df;
+  color: #fff5df;
+  font-size: .8rem;
+}
+.cabin-wordmark { font-size: 1.25rem; letter-spacing: .16em; }
+.cabin-settings {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 1.1rem;
+  right: 1.1rem;
+  z-index: 5;
+  width: 44px;
+  height: 44px;
+  border-radius: .75rem;
+}
+.cabin-header button {
+  min-height: 34px;
+  border-radius: .5rem;
+  padding: .22rem .5rem;
+  white-space: nowrap;
+}
+.cabin-controls {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  gap: .3rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+}
+.cabin-controls button {
+  white-space: nowrap;
+  min-height: 44px;
+  min-width: 44px;
+  padding-inline: .5rem;
+  border-radius: .55rem;
+}
+@media (max-width: 520px) {
+  .cabin-header { top: .55rem; left: .55rem; gap: .45rem; }
+  .cabin-settings { top: .55rem; right: .55rem; }
+  .cabin-wordmark { font-size: 1rem; }
+}
+@media (max-aspect-ratio: 4/5) {
+  .cabin-shell {
+    --still-width: min(100vw, 52.7dvh);
+    --still-height: min(100dvh, 189.74vw);
+  }
+  [data-cabin-view="outside"] { --cabin-still: url('/cabin/outside-portrait.webp'); }
+  [data-cabin-view="inside"] { --cabin-still: url('/cabin/inside-portrait.webp'); }
+  [data-cabin-view="desk"] { --cabin-still: url('/cabin/desk-portrait.webp'); }
+  .cabin-object-door { top: 53.5%; left: 48.2%; }
+  .cabin-object-mailbox { top: 58%; left: 54%; }
+  .cabin-object-mailbox .cabin-object-label {
+    bottom: auto;
+    top: calc(100% + 4px);
+  }
+  .cabin-object-desk { top: 52.7%; left: 79%; }
+  .cabin-object-paper { top: 57.8%; left: 52.5%; }
+  .cabin-object-calendar { top: 49.3%; left: max(45px, 14.4%); }
+  .cabin-object-turntable { top: 51.3%; left: min(80.8%, calc(100% - 72px)); }
+}

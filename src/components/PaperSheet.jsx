@@ -28,7 +28,8 @@ function PaperWindowHint({ onClose, disabled = false, buttonRef }) {
   return (
     <div className="paper-window-hint" role="status">
       <p>把窗口放大些，再铺开这张纸。</p>
-      <p>请按 F11 进入浏览器全屏后再试。</p>
+      <p className="paper-window-keyboard">请按 F11 进入浏览器全屏后再试。</p>
+      <p className="paper-window-touch">请在电脑上打开寻常，展开完整信纸。</p>
       <button ref={buttonRef} type="button" onClick={onClose} disabled={disabled}>收起</button>
     </div>
   )

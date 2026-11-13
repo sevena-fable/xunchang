@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client'
 import { MotionConfig } from 'framer-motion'
 import './index.css'
 import Scene from './components/Scene'
+import CabinExperience from './components/cabin/CabinExperience'
+import MailboxPanel from './components/MailboxPanel'
 import WriteLetter from './components/WriteLetter'
 import ReadLetter from './components/ReadLetter'
 import CalendarPanel from './components/CalendarPanel'
@@ -30,6 +32,8 @@ function loadReplies() {
 }
 const resolveImages = async (images) => images.map((file) => URL.createObjectURL(file))
 const noop = () => {}
+const cabinPreview = new URLSearchParams(location.search).get('cabin') === '1'
+const PreviewScene = cabinPreview ? CabinExperience : Scene
 
 function Preview() {
   const [panel, setPanel] = useState(null)
@@ -91,13 +95,15 @@ function Preview() {
 
   return (
     <>
-      <Scene onOpen={setPanel} debugHotspots={boxes} unreadCount={unread.length}>
+      <PreviewScene onOpen={setPanel} debugHotspots={boxes} unreadCount={unread.length}>
         <WriteLetter environment="preview" open={panel === 'write'} onClose={() => setPanel(null)} pair={pair} userId={viewerId} onSend={send} onDone={noop} />
+        <MailboxPanel open={panel === 'mailbox'} onClose={() => setPanel(null)} history={letters.filter((letter) => ['delivered', 'read'].includes(letter.status))}
+          unread={unread} userId={viewerId} onRead={(letter) => { setPanel(null); setReadingId(letter.id) }} />
         <CalendarPanel open={panel === 'calendar'} onClose={() => setPanel(null)} history={letters.filter((letter) => ['delivered', 'read'].includes(letter.status))} unread={unread} mySealed={mySealed} userId={viewerId} onRead={(letter) => { setPanel(null); setReadingId(letter.id) }} />
         <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} profile={profile} pair={pair} partnerNickname="阿灰" onSave={async (nickname) => setProfile({ id: ME, nickname })} onLogout={async () => setPanel(null)} />
         {reading && <ReadLetter key={`${reading.id}:${viewerId}`} letter={reading} userId={viewerId} replies={replies.filter((reply) => reply.letter_id === reading.id)} onReply={replyToText} reaction={reactions[reading.id]} onClose={() => setReadingId(null)} onChanged={noop} onMarkRead={markRead} onDeliver={deliver} onReact={react} resolveImages={resolveImages} />}
-      </Scene>
-        <nav aria-label="预览工具" className="fixed bottom-2 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-xl bg-[#857c91]/90 px-4 py-2 text-xs text-[#f7f2ee]">
+      </PreviewScene>
+        {!cabinPreview && <nav aria-label="预览工具" className="fixed bottom-2 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-xl bg-[#857c91]/90 px-4 py-2 text-xs text-[#f7f2ee]">
           <button onClick={() => setBoxes((value) => !value)}>热区</button>
           <button onClick={() => setPanel('write')}>分享</button>
           <button onClick={() => setPanel('calendar')}>台历</button>
@@ -105,7 +111,7 @@ function Preview() {
           <button onClick={() => setReadingId('l1')}>查看内容</button>
           <button onClick={() => setViewerId((value) => value === ME ? YOU : ME)}>{viewerId === ME ? '切换为分享者' : '切换为阅读者'}</button>
           <span className="ml-2 opacity-60">本地演示</span>
-        </nav>
+        </nav>}
     </>
   )
 }

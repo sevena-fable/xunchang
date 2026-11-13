@@ -23,7 +23,8 @@
     "framer-motion": "^12.43.0",
     "lxgw-wenkai-webfont": "1.7.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",

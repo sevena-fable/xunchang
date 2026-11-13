@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Panel, { GhostButton, PrimaryButton } from './Panel'
-import { resetBgm, startBgm } from '../lib/bgm'
+import { prepareBgm, resetBgm, startBgm } from '../lib/bgm'
 import { loadSongGifts } from '../lib/songGifts'
 
 export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
@@ -31,20 +31,20 @@ export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
   }, [pairId, partnerId, open, attempt])
 
   const { gifts = [], loading, error } = result
-  const playable = gifts.filter((gift) => gift.url)
+  const giftTracks = gifts.map((gift) => gift.url).filter(Boolean)
   const count = gifts.length
-  const unavailable = count - playable.length
+  const unavailable = count - giftTracks.length
   const sender = partnerNickname || '对方'
   function skip() {
     playback.current++
-    resetBgm()
+    prepareBgm(giftTracks.length ? giftTracks : undefined)
     setOpen(false)
   }
   async function play(useGifts) {
     const token = ++playback.current
     setStarting(true)
     setPlayError('')
-    const started = await startBgm(useGifts ? playable.map((gift) => gift.url) : '/bgm.mp3')
+    const started = await startBgm(useGifts ? giftTracks : '/bgm.mp3')
     if (!active.current || token !== playback.current) return
     setStarting(false)
     if (started) setOpen(false)
@@ -63,8 +63,8 @@ export default function EntryMusic({ pairId, partnerId, partnerNickname }) {
       {playError && <p role="alert" className="mb-3 text-sm">{playError}</p>}
       <div className="panel-actions flex-wrap">
         <GhostButton onClick={skip}>先不听</GhostButton>
-        {count > 0 && (playError || !playable.length) && <GhostButton disabled={starting} onClick={() => play(false)}>播放原背景音乐</GhostButton>}
-        {(!count || playable.length > 0) && <PrimaryButton disabled={loading || starting} onClick={() => play(count > 0)}>
+        {count > 0 && (playError || !giftTracks.length) && <GhostButton disabled={starting} onClick={() => play(false)}>播放原背景音乐</GhostButton>}
+        {(!count || giftTracks.length > 0) && <PrimaryButton disabled={loading || starting} onClick={() => play(count > 0)}>
           {starting ? '正在播放…' : count > 1 ? '听这些歌' : count === 1 ? '听这首' : '播放'}
         </PrimaryButton>}
       </div>

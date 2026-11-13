@@ -30,11 +30,18 @@ function setPlaying(next) {
   listeners.forEach((listener) => listener())
 }
 
+function selectPlaylist(source) {
+  playlist = Array.isArray(source) ? source : [source]
+  track = 0
+}
+
+export function prepareBgm(source = defaultSource) {
+  stopBgm()
+  selectPlaylist(source)
+}
+
 export function startBgm(source) {
-  if (source !== undefined) {
-    playlist = Array.isArray(source) ? source : [source]
-    track = 0
-  }
+  if (source !== undefined) selectPlaylist(source)
   return playTrack(track)
 }
 
@@ -72,8 +79,7 @@ export function resetBgm() {
   audio?.removeAttribute('src')
   audio?.load()
   audio = null
-  playlist = [defaultSource]
-  track = 0
+  selectPlaylist(defaultSource)
 }
 
 export function toggleBgm() {
