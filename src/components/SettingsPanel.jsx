@@ -38,14 +38,10 @@ export default function SettingsPanel({ open, onClose, profile, pair, partnerNic
       <div className="panel-box my-5 px-4 py-3 text-sm leading-7">
         <p>与你分享文字的人是 {partnerNickname || '（对方还没填昵称）'}</p>
         <p className="text-xs text-[var(--panel-muted)]">邀请码 <span className="tracking-widest text-[var(--panel-ink)]">{pair.invite_code}</span></p>
-        <p className="flex items-center justify-between">背景音乐
-          <button type="button" onClick={toggleBgm} aria-label={bgmPlaying ? '静音背景音乐' : '播放背景音乐'} aria-pressed={bgmPlaying} className="rounded-lg p-1.5 text-[var(--panel-muted)] hover:bg-[var(--panel-soft)] hover:text-[var(--panel-ink)]">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 9.5v5h3l4.5 3.5V6L7 9.5H4z" />
-              {bgmPlaying ? <><path d="M15.5 9a4 4 0 0 1 0 6" /><path d="M18 6.5a7.5 7.5 0 0 1 0 11" /></> : <path d="m16 9.5 5 5m0-5-5 5" />}
-            </svg>
-          </button>
-        </p>
+      </div>
+      <div className="settings-music mb-5 border-b border-[var(--panel-border)] pb-4 text-sm">
+        <span>背景音乐</span>
+        <button type="button" onClick={toggleBgm} aria-label={bgmPlaying ? '静音背景音乐' : '播放背景音乐'} aria-pressed={bgmPlaying} className="settings-toggle" />
       </div>
       {open && songGiftActions && <SongGiftForm busy={busy} pair={pair} userId={profile.id} actions={songGiftActions} runAction={run} />}
       <p className="min-h-5 text-sm" role="status">{message}</p>

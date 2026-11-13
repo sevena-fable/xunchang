@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './lib/supabase'
-import { BG_MAIN } from './lib/scene'
 import AuthPage from './pages/AuthPage'
 import PairPage from './pages/PairPage'
 import HomePage from './pages/HomePage'
+import EntryLayout from './components/EntryLayout'
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -114,19 +114,12 @@ export default function App() {
     return <><HomePage key={`${userId}:${data.pair.id}`} {...data} onChanged={load} />{visibleError && <p role="alert" className="panel-toast fixed bottom-4 left-4 z-30 p-3">{visibleError}<button onClick={retry} className="ml-3 underline">重试</button></p>}</>
   }
   let screen
-  if (recovery && authReady) screen = <AuthPage recovery canReset={!!session} onRecoveryDone={finishRecovery} />
+  if (recovery && authReady) screen = <AuthPage auth={supabase.auth} recovery canReset={!!session} onRecoveryDone={finishRecovery} />
   else if (visibleError) screen = <div role="alert" className="entry-card panel-card"><p className="entry-message">{visibleError}</p><div className="entry-links"><button onClick={retry}>重试</button>{session && <button onClick={logout}>退出登录</button>}</div></div>
   else if (!authReady || loading) screen = <p role="status" className="entry-card panel-card text-center text-sm">正在加载…</p>
-  else if (!session) screen = <AuthPage />
+  else if (!session) screen = <AuthPage auth={supabase.auth} />
   else if (data?.profile) screen = <PairPage userId={userId} pair={data.pair} onChanged={load} />
   else screen = <button className="panel-primary w-full" onClick={retry}>重新读取资料</button>
 
-  return (
-    <main className="entry-page" style={{ backgroundImage: `linear-gradient(#4a435826, #4a435826), url(${BG_MAIN})` }}>
-      <div className="entry-content">
-        <h1 className="entry-brand">寻常</h1>
-        {screen}
-      </div>
-    </main>
-  )
+  return <EntryLayout>{screen}</EntryLayout>
 }

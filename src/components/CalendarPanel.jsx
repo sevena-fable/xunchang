@@ -66,7 +66,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
           <span
             key={i}
             className="h-2.5 w-2.5 rounded-full"
-            style={{ background: 'linear-gradient(180deg,#e6d3dd,#937b90)', boxShadow: 'inset 0 -1px 1px rgba(255,255,255,0.6)' }}
+            style={{ background: 'linear-gradient(180deg,var(--panel-soft-strong),var(--panel-field-focus))', boxShadow: 'inset 0 -1px 1px rgba(255,255,255,0.6)' }}
           />
         ))}
       </div>
@@ -105,7 +105,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
               className="relative flex h-10 flex-col items-center justify-center rounded-lg text-sm transition-colors"
               style={{
                 color: items ? 'var(--panel-ink)' : 'var(--panel-faint)',
-                background: isPicked ? 'var(--panel-soft-strong)' : items ? '#fbf7f8b3' : 'transparent',
+                background: isPicked ? 'var(--panel-soft-strong)' : items ? 'var(--panel-field)' : 'transparent',
                 border: isToday ? '1px solid var(--panel-field-focus)' : '1px solid transparent',
                 cursor: items ? 'pointer' : 'default',
               }}
@@ -116,7 +116,7 @@ function CalendarPanel({ open, onClose, history, unread = [], mySealed = [], use
                   initial={reducedMotion ? false : { scale: 0 }}
                   animate={{ scale: 1 }}
                   className="absolute bottom-1 h-[3.5px] w-[3.5px] rounded-full"
-                  style={{ background: '#c48c92', boxShadow: '0 0 0 1px rgba(247,242,238,0.9)' }}
+                  style={{ background: '#97672d', boxShadow: '0 0 0 1px var(--panel-field)' }}
                 />
               )}
             </button>

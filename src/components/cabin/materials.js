@@ -24,6 +24,10 @@ export function cabinMaterials(onLoaded) {
       texture.repeat.set(...repeat)
       texture.anisotropy = 4
       if (name === 'plywood') texture.rotation = Math.PI / 2
+      if (name === 'wood-planks') {
+        texture.rotation = Math.PI / 2
+        texture.offset.y = 0.12
+      }
       if (kind === 'color') texture.colorSpace = T.SRGBColorSpace
       material[property] = texture
     }
@@ -31,7 +35,8 @@ export function cabinMaterials(onLoaded) {
   }
   return {
     timber: surface('plywood', [0.5, 2], '#dfbc91', 0.22),
+    cladding: surface('wood-planks', [1, 0.10], '#fff3da', 0.3),
     bark: surface('bark_brown_02', [2, 4], '#c0b7a6', 1.05),
-    earth: surface('forest_ground_04', [33, 33], '#a2ac7c', 0.75),
+    earth: surface('forest_ground_04', [33, 33], '#c4d89b', 0.55),
   }
 }

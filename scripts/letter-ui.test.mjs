@@ -288,7 +288,7 @@ async function expectPinkBands(page, selector = '.annotation-highlight') {
     const lineHeight = parseFloat(getComputedStyle(element.closest('.letter-sheet')).getPropertyValue('--paper-line-height'))
     const top = rect.top - box.top
     const rule = (Math.floor(top / lineHeight) + 1) * lineHeight
-    return css.backgroundColor === 'rgb(247, 214, 212)' && parseFloat(css.borderRadius) >= rect.height / 2
+    return css.backgroundColor === 'rgb(243, 222, 177)' && parseFloat(css.borderRadius) >= rect.height / 2
       && rect.height > 0 && rect.height <= 14.1 && rect.width > 0
       && top >= 0 && rect.bottom <= box.bottom + 1 && rule - top - rect.height >= 4.9
       && css.pointerEvents === 'none'
@@ -315,10 +315,10 @@ test('annotations right-click, edit, persist and read long notes without changin
     await addAnnotation(page, 6, 0, '这是第一处批注。')
     await expect(page.getByLabel('信纸页码')).toHaveText(pages)
     await expect(input).toHavePaperText(text)
-    await expect(page.locator('.annotation-highlight').first()).toHaveCSS('background-color', 'rgb(247, 214, 212)')
+    await expect(page.locator('.annotation-highlight').first()).toHaveCSS('background-color', 'rgb(243, 222, 177)')
     await clickMark(page)
     panel = page.getByRole('dialog', { name: '编辑批注', exact: true })
-    await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(247, 242, 244)')
+    await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(250, 242, 222)')
     await expect(panel.locator('.annotation-card')).toHaveCSS('background-image', 'none')
     await panel.getByRole('textbox', { name: '批注内容' }).fill(longNote)
     await panel.getByRole('button', { name: '保存批注' }).click()
@@ -368,7 +368,7 @@ test('annotations pearl note controls stay readable and keep keyboard behavior',
     const close = panel.getByRole('button', { name: '关闭批注' })
     await note.press('Shift+Tab')
     await expect(close).toBeFocused()
-    await expect(close).toHaveCSS('outline-color', 'rgb(133, 124, 145)')
+    await expect(close).toHaveCSS('outline-color', 'rgb(85, 94, 73)')
     await expect(close).toHaveCSS('outline-width', '1px')
     await close.press('Tab')
     await expect(note).toBeFocused()
@@ -391,14 +391,14 @@ test('annotations pearl note controls stay readable and keep keyboard behavior',
     assert.ok(contrast[1] >= 4.5)
     for (const name of ['保存批注', '关闭批注', '删除批注']) {
       const button = panel.getByRole('button', { name })
-      await expect(button).toHaveCSS('color', 'rgb(133, 124, 145)')
+      await expect(button).toHaveCSS('color', 'rgb(85, 94, 73)')
       await expect(button).toHaveCSS('width', '28px')
       await expect(button).toHaveCSS('height', '28px')
       await expect(button.locator('svg')).toHaveCSS('width', '16px')
       await expect(button.locator('svg')).toHaveCSS('stroke-width', '1.5px')
       await button.hover()
-      await expect(button).toHaveCSS('background-color', 'rgb(238, 231, 240)')
-      await expect(button).toHaveCSS('color', 'rgb(101, 88, 107)')
+      await expect(button).toHaveCSS('background-color', 'rgb(230, 232, 213)')
+      await expect(button).toHaveCSS('color', 'rgb(50, 53, 42)')
       await page.mouse.move(8, 8)
     }
     await page.keyboard.press('Escape')
@@ -411,7 +411,7 @@ test('annotations pearl note controls stay readable and keep keyboard behavior',
   } finally { await context.close() }
 })
 
-test('annotations use thin rounded pink live selections without changing native copy and editing', { timeout: 30000 }, async () => {
+test('annotations use thin rounded gold live selections without changing native copy and editing', { timeout: 30000 }, async () => {
   const { context, page, backend, errors } = await preview()
   try {
     const input = await writer(page)
@@ -452,7 +452,7 @@ test('annotations use thin rounded pink live selections without changing native 
     await input.press('Control+Home')
     await expect(page.locator('.paper-selection-mark')).toHaveCount(0)
     await selectAnnotation(page, 6, 10)
-    await page.getByRole('textbox', { name: '批注内容' }).fill('原文仍然有细粉色的定位。')
+    await page.getByRole('textbox', { name: '批注内容' }).fill('原文仍然有细金色的定位。')
     await expectPinkBands(page, '.paper-selection-mark')
     await page.keyboard.press('Escape')
     await expect(page.locator('.annotation-highlight')).toHaveCount(0)
@@ -723,15 +723,15 @@ for (const [width, height] of [[900, 600], [1366, 900], [1920, 1080]]) {
             && buttons.every((button, index) => button.bottom <= content.top && button.left >= box.left && button.right <= box.right
               && buttons.every((other, otherIndex) => index === otherIndex || button.right <= other.left || other.right <= button.left))
         })).toBe(true)
-        await expect(page.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(247, 242, 244)')
-        await expect(page.locator('.annotation-card')).toHaveCSS('border-color', 'rgb(216, 203, 216)')
+        await expect(page.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(250, 242, 222)')
+        await expect(page.locator('.annotation-card')).toHaveCSS('border-color', 'rgb(200, 183, 144)')
         await expect(page.locator('.annotation-card')).toHaveCSS('border-radius', '8px')
         await expect(page.locator('.annotation-card')).toHaveCSS('background-image', 'none')
         await expect(page.locator('.annotation-card')).toHaveCSS('backdrop-filter', 'none')
-        await expect(page.locator('.annotation-lines')).toHaveCSS('color', 'rgb(101, 88, 107)')
+        await expect(page.locator('.annotation-lines')).toHaveCSS('color', 'rgb(50, 53, 42)')
         await expect(page.locator('.annotation-lines')).toHaveCSS('resize', 'none')
         await expect(page.locator('.annotation-lines')).toHaveCSS('background-image', 'none')
-        assert.equal(await page.locator('.annotation-lines').evaluate((element) => getComputedStyle(element, '::selection').backgroundColor), 'rgb(222, 201, 223)')
+        assert.equal(await page.locator('.annotation-lines').evaluate((element) => getComputedStyle(element, '::selection').backgroundColor), 'rgb(243, 222, 177)')
       }
       await input.fill(text)
       const pages = await page.getByLabel('信纸页码').textContent()
@@ -2902,7 +2902,7 @@ for (const failure of [
 }
 
 for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 768 }, { width: 900, height: 600 }, { width: 320, height: 640 }]) {
-  test(`entry pages share the desk background and fit ${viewport.width}x${viewport.height}`, { timeout: 30000 }, async () => {
+  test(`entry pages share the cabin background and fit ${viewport.width}x${viewport.height}`, { timeout: 30000 }, async () => {
     const { context, page, state, login } = await live()
     const consoleErrors = []
     page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()) })
@@ -2910,7 +2910,7 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 1366, height: 76
       await page.setViewportSize(viewport)
       await expect(page.getByRole('heading', { name: '登录', exact: true })).toBeVisible()
       await page.evaluate(() => document.fonts.ready)
-      assert.match(await page.locator('.entry-page').evaluate((element) => getComputedStyle(element).backgroundImage), /bg-main\.jpg/)
+      assert.match(await page.locator('.entry-page').evaluate((element) => getComputedStyle(element).backgroundImage), (viewport.width <= 680 ? /cabin\/outside-portrait\.webp/ : /cabin\/outside\.webp/))
       await expect(page.locator('img[src*="feather"], [class*="sky-"], .feather-float')).toHaveCount(0)
       await expect(page.getByText('把寻常的日子，写给你')).toHaveCount(0)
       const checkCard = async (name) => {
@@ -3054,8 +3054,8 @@ for (const viewport of [{ width: 1366, height: 900 }, { width: 320, height: 640 
       const input = await writer(page)
       await input.fill('窗边的一封信。')
       await expect(page.locator('.letter-sheet')).not.toHaveClass(/panel-card/)
-      await expect(page.locator('.letter-sheet')).toHaveCSS('background-image', /paper-floral\.png/)
-      await expect(page.locator('.letter-tools > button')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      await expect(page.locator('.paper-heading')).toHaveCSS('background-color', 'rgb(57, 75, 52)')
+      await expect(page.locator('.letter-tools > button')).toHaveCSS('background-color', 'rgb(57, 75, 52)')
       await page.getByRole('button', { name: '加出处', exact: true }).click()
       await page.setViewportSize(viewport)
       await checkBotanicalPanel(page, `source-${viewport.width}`)
@@ -3076,7 +3076,7 @@ for (const viewport of [{ width: 1366, height: 900 }, { width: 320, height: 640 
 
       await page.getByRole('button', { name: '查看内容', exact: true }).click()
       await expect(page.locator('.letter-sheet')).not.toHaveClass(/panel-card/)
-      await expect(page.locator('.letter-sheet')).toHaveCSS('background-image', /paper-floral\.png/)
+      await expect(page.locator('.paper-heading')).toHaveCSS('background-color', 'rgb(57, 75, 52)')
       await page.getByRole('button', { name: '留个回应', exact: true }).click()
       await page.setViewportSize(viewport)
       await checkBotanicalPanel(page, `reaction-${viewport.width}`)
@@ -3156,17 +3156,17 @@ async function selectReply(page, start, end) {
   return panel
 }
 
-test('annotation replies use blue and lavender overlaps, persist and are visible from both viewpoints', { timeout: 45000 }, async () => {
+test('annotation replies use sage replies and ochre overlaps, persist and are visible from both viewpoints', { timeout: 45000 }, async () => {
   const { context, page, backend, errors } = await preview()
   try {
     await page.getByRole('button', { name: '查看内容', exact: true }).click()
     const text = await page.locator('.paper-reading').textContent()
-    for (const [tone, color] of [['author', 'rgb(247, 214, 212)'], ['reply', 'rgb(214, 234, 245)'], ['overlap', 'rgb(227, 221, 241)']]) {
+    for (const [tone, color] of [['author', 'rgb(243, 222, 177)'], ['reply', 'rgb(215, 230, 204)'], ['overlap', 'rgb(212, 198, 154)']]) {
       await expect(page.locator(`.annotation-highlight[data-tone="${tone}"]`).first()).toHaveCSS('background-color', color)
     }
     const panel = await selectReply(page, 0, 9)
     await expect(panel.locator('h1,h2,h3,header,blockquote,label')).toHaveCount(0)
-    await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(244, 249, 252)')
+    await expect(panel.locator('.annotation-card')).toHaveCSS('background-color', 'rgb(237, 242, 228)')
     await expect(panel.locator('.annotation-card')).toHaveCSS('border-radius', '8px')
     const input = panel.getByRole('textbox', { name: '批注回复内容' })
     await input.fill('短回复')

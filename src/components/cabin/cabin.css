@@ -84,12 +84,12 @@
 .cabin-object-mailbox { min-width: 44px; }
 .cabin-object[hidden], .cabin-world[data-moving="true"] .cabin-object { display: none; }
 .cabin-shell:has(.cabin-world[data-moving="true"]) .cabin-header button { visibility: hidden; }
-.cabin-object-door { top: 59.5%; left: 48.3%; }
-.cabin-object-mailbox { top: 72%; left: 54%; }
-.cabin-object-desk { top: 57%; left: 77%; }
-.cabin-object-paper { top: 71%; left: 52%; }
-.cabin-object-calendar { top: 48%; left: 17%; }
-.cabin-object-turntable { top: 53.5%; left: 81%; }
+.cabin-object-door { top: 60.8%; left: 61.625%; }
+.cabin-object-mailbox { top: 59.9%; left: 80%; }
+.cabin-object-desk { top: 55.1%; left: 71.125%; }
+.cabin-object-paper { top: 69.3%; left: 51.6875%; }
+.cabin-object-calendar { top: 48.1%; left: 26.5%; }
+.cabin-object-turntable { top: 53.1%; left: 72.375%; }
 .cabin-music-state { color: #e8c393; font-size: .7rem; }
 .cabin-object-count {
   display: grid;
@@ -164,14 +164,14 @@
   [data-cabin-view="outside"] { --cabin-still: url('/cabin/outside-portrait.webp'); }
   [data-cabin-view="inside"] { --cabin-still: url('/cabin/inside-portrait.webp'); }
   [data-cabin-view="desk"] { --cabin-still: url('/cabin/desk-portrait.webp'); }
-  .cabin-object-door { top: 53.5%; left: 48.2%; }
-  .cabin-object-mailbox { top: 58%; left: 54%; }
+  .cabin-object-door { top: 53.92%; left: 62.82%; }
+  .cabin-object-mailbox { top: 53.65%; left: 83.08%; }
   .cabin-object-mailbox .cabin-object-label {
     bottom: auto;
     top: calc(100% + 4px);
   }
-  .cabin-object-desk { top: 52.7%; left: 79%; }
-  .cabin-object-paper { top: 57.8%; left: 52.5%; }
-  .cabin-object-calendar { top: 49.3%; left: max(45px, 14.4%); }
-  .cabin-object-turntable { top: 51.3%; left: min(80.8%, calc(100% - 72px)); }
+  .cabin-object-desk { top: 51.89%; left: 73.33%; }
+  .cabin-object-paper { top: 57.03%; left: 51.79%; }
+  .cabin-object-calendar { top: 49.32%; left: max(45px, 24.1%); }
+  .cabin-object-turntable { top: 51.08%; left: min(74.62%, calc(100% - 72px)); }
 }

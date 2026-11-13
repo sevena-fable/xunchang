@@ -21,9 +21,13 @@ export default function MailboxPanel({ open, onClose, onRead, history, unread, u
           <ul className="space-y-2">
             {items.map((letter) => (
               <li key={letter.id}>
-                <button type="button" onClick={() => onRead(letter)} className="panel-box flex w-full gap-3 px-3 py-2 text-left text-sm hover:bg-[var(--panel-soft)]">
-                  <time className="shrink-0 text-xs">{dayKey(letter.delivered_at || letter.sealed_at)}</time>
+                <button type="button" onClick={() => onRead(letter)} data-unread={newIds.has(letter.id)} className="panel-box mailbox-row">
+                  <svg className="mailbox-row-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="m4 7 8 6 8-6" />
+                  </svg>
                   <span className="min-w-0 flex-1 truncate">{letter.content?.trim() || '（照片）'}</span>
+                  <time className="shrink-0 text-xs">{dayKey(letter.delivered_at || letter.sealed_at)}</time>
                 </button>
               </li>
             ))}

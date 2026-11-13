@@ -9,6 +9,8 @@ import WriteLetter from './components/WriteLetter'
 import ReadLetter from './components/ReadLetter'
 import CalendarPanel from './components/CalendarPanel'
 import SettingsPanel from './components/SettingsPanel'
+import EntryLayout from './components/EntryLayout'
+import AuthPage from './pages/AuthPage'
 import { sameReply, validateReply } from './lib/annotationReplies'
 
 const ME = '11111111-1111-1111-1111-111111111111'
@@ -103,7 +105,7 @@ function Preview() {
         <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} profile={profile} pair={pair} partnerNickname="阿灰" onSave={async (nickname) => setProfile({ id: ME, nickname })} onLogout={async () => setPanel(null)} />
         {reading && <ReadLetter key={`${reading.id}:${viewerId}`} letter={reading} userId={viewerId} replies={replies.filter((reply) => reply.letter_id === reading.id)} onReply={replyToText} reaction={reactions[reading.id]} onClose={() => setReadingId(null)} onChanged={noop} onMarkRead={markRead} onDeliver={deliver} onReact={react} resolveImages={resolveImages} />}
       </PreviewScene>
-        {!cabinPreview && <nav aria-label="预览工具" className="fixed bottom-2 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-xl bg-[#857c91]/90 px-4 py-2 text-xs text-[#f7f2ee]">
+        {!cabinPreview && <nav aria-label="预览工具" className="fixed bottom-2 left-1/2 z-30 flex -translate-x-1/2 gap-2 rounded-xl bg-[var(--panel-header)] px-4 py-2 text-xs text-[var(--panel-accent-ink)]">
           <button onClick={() => setBoxes((value) => !value)}>热区</button>
           <button onClick={() => setPanel('write')}>分享</button>
           <button onClick={() => setPanel('calendar')}>台历</button>
@@ -116,4 +118,11 @@ function Preview() {
   )
 }
 
-createRoot(document.getElementById('root')).render(<StrictMode><MotionConfig reducedMotion="user"><Preview /></MotionConfig></StrictMode>)
+const entryPreview = new URLSearchParams(location.search).get('entry') === '1'
+createRoot(document.getElementById('root')).render(
+  <StrictMode>
+    <MotionConfig reducedMotion="user">
+      {entryPreview ? <EntryLayout><AuthPage /></EntryLayout> : <Preview />}
+    </MotionConfig>
+  </StrictMode>,
+)

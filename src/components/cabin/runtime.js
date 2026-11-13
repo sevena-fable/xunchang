@@ -1,10 +1,11 @@
 import * as T from 'three'
 import { createCabin, targets, views } from './model'
+import { buildingPoint } from './architecture'
 
 const v = (values) => new T.Vector3(...values)
-const doorLook = [2.54, 1.57, 2.15]
-const doorOutside = [2.54, 1.79, 5.2]
-const doorInside = [2.54, 1.79, 2.8]
+const doorLook = buildingPoint([2.54, 1.57, 2.15])
+const doorOutside = buildingPoint([2.54, 1.79, 5.2])
+const doorInside = buildingPoint([2.54, 1.79, 2.8])
 const maxRenderPixels = 4_000_000
 
 export function mountCabin(host, labels, onError, onSettled) {
@@ -13,7 +14,7 @@ export function mountCabin(host, labels, onError, onSettled) {
   renderer.shadowMap.type = T.PCFShadowMap
   renderer.shadowMap.autoUpdate = false
   renderer.toneMapping = T.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.03
+  renderer.toneMappingExposure = 1.1
   renderer.domElement.setAttribute('aria-hidden', 'true')
   host.prepend(renderer.domElement)
   const { scene, door, envelope, pigeon, perchAnchor, turntable } = createCabin((loaded) => {
@@ -238,7 +239,7 @@ export function mountCabin(host, labels, onError, onSettled) {
       if (fromView === 'outside' && next === 'inside') {
         poses.push(waypoint(doorOutside, doorLook), waypoint(doorInside, views.inside.to))
       } else if (fromView === 'inside' && next === 'outside') {
-        poses.push(waypoint(doorInside, [2.54, 1.55, 6.7]), waypoint(doorOutside, [2.54, 1.5, 3.6]))
+        poses.push(waypoint(doorInside, buildingPoint([2.54, 1.55, 6.7])), waypoint(doorOutside, buildingPoint([2.54, 1.5, 3.6])))
       }
       poses.push(destination)
       movement = { poses, start: performance.now(), duration: poses.length > 2 ? 1350 : 780 }
@@ -250,7 +251,7 @@ export function mountCabin(host, labels, onError, onSettled) {
     if (movement || view === 'desk') return
     if (view === 'outside') {
       exterior.theta = T.MathUtils.clamp(exterior.theta - dx * 0.008, -1.06, 1.08)
-      exterior.phi = T.MathUtils.clamp(exterior.phi - dy * 0.006, 1.05, 1.42)
+      exterior.phi = T.MathUtils.clamp(exterior.phi - dy * 0.006, 1.10, 1.53)
     } else {
       indoorOffset.theta = T.MathUtils.clamp(indoorOffset.theta - dx * 0.007, initialIndoor.theta - 0.32, initialIndoor.theta + 0.48)
       indoorOffset.phi = T.MathUtils.clamp(indoorOffset.phi - dy * 0.006, initialIndoor.phi - 0.23, initialIndoor.phi + 0.27)

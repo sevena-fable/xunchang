@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from '../lib/supabase'
 
-export default function AuthPage({ recovery = false, canReset = false, onRecoveryDone }) {
+export default function AuthPage({ auth, recovery = false, canReset = false, onRecoveryDone }) {
   const [mode, setMode] = useState(recovery ? 'reset' : 'login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -20,24 +19,25 @@ export default function AuthPage({ recovery = false, canReset = false, onRecover
     if (lock.current || done || (mode === 'reset' && !canReset)) return
     if (mode === 'register' && !nickname.trim()) { setMessage('请输入昵称'); return }
     if (mode === 'reset' && password !== confirm) { setMessage('两次密码不一致'); return }
+    if (!auth) { setMessage('当前为界面预览。请在正式页面登录或注册。'); return }
     lock.current = true
     setBusy(true)
     setMessage('')
     try {
       if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${location.origin}/?recovery=1` })
+        const { error } = await auth.resetPasswordForEmail(email.trim(), { redirectTo: `${location.origin}/?recovery=1` })
         if (error) throw error
         if (alive.current) { setDone(true); setMessage('如果该邮箱已注册，将收到重置邮件。') }
       } else if (mode === 'reset') {
-        const { error } = await supabase.auth.updateUser({ password })
+        const { error } = await auth.updateUser({ password })
         if (error) throw error
         if (alive.current) { setDone(true); setPassword(''); setConfirm(''); setMessage('新密码已保存') }
       } else if (mode === 'register') {
-        const { data, error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { nickname: nickname.trim() } } })
+        const { data, error } = await auth.signUp({ email: email.trim(), password, options: { data: { nickname: nickname.trim() } } })
         if (error) throw error
         if (alive.current && !data.session) { setDone(true); setPassword(''); setMessage('请查收验证邮件，验证后登录。') }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+        const { error } = await auth.signInWithPassword({ email: email.trim(), password })
         if (error) throw error
       }
     } catch (error) { if (alive.current) setMessage(translateError(error)) }

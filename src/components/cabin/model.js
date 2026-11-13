@@ -4,8 +4,11 @@ import { makePigeon, makeTurntable } from './objects'
 import { cabinMaterials } from './materials'
 import { addForest } from './forest'
 import { fabricWeave } from './textures'
+import { addGarden, addWindowDetails } from './garden'
+import { buildingScale, buildingPoint, referenceCamera } from './architecture'
+import { addPorchDetails } from './porch'
 
-export const targets = {
+const buildingTargets = {
   door: { center: [2.55, 1.4, 3.83], size: [1.7, 2.46, 0.15] },
   mailbox: { center: [5.85, 1.53, 6.45], size: [0.86, 0.52, 0.66] },
   desk: { center: [1.65, 1.08, -2.4], size: [2.44, 0.32, 1.22] },
@@ -13,11 +16,14 @@ export const targets = {
   calendar: { center: [0.77, 1.18, -2.65], size: [0.46, 0.38, 0.17] },
   turntable: { center: [2.59, 1.01, -2.82], size: [0.64, 0.14, 0.51] },
 }
+export const targets = Object.fromEntries(Object.entries(buildingTargets).map(([name, target]) => [name, {
+  center: buildingPoint(target.center), size: buildingPoint(target.size),
+}]))
 
 export const views = {
-  outside: { from: [12.8, 7.7, 16.4], to: [0.45, 1.65, 0.5] },
-  inside: { from: [3.44, 1.99, 2.75], to: [-0.58, 1.25, -2.25] },
-  desk: { from: [1.64, 1.72, -1.02], to: [1.65, 1.00, -3.05] },
+  outside: referenceCamera,
+  inside: { from: buildingPoint([3.44, 1.99, 2.75]), to: buildingPoint([-0.58, 1.25, -2.25]) },
+  desk: { from: buildingPoint([1.64, 1.72, -1.02]), to: buildingPoint([1.65, 1.00, -3.05]) },
 }
 
 function random(seed = 824) {
@@ -31,8 +37,8 @@ const material = (color, options = {}) => new T.MeshStandardMaterial({ color, ro
 
 export function createCabin(onMaterialsLoaded) {
   const scene = new T.Scene()
-  scene.background = new T.Color('#d6e0cf')
-  scene.fog = new T.FogExp2('#c1cfb6', 0.025)
+  scene.background = new T.Color('#d5eaf3')
+  scene.fog = new T.Fog('#dae6dd', 38, 110)
   const rng = random()
   const surfaces = cabinMaterials(onMaterialsLoaded)
   const wood = (color) => {
@@ -40,16 +46,19 @@ export function createCabin(onMaterialsLoaded) {
     timber.color.set(color)
     return timber
   }
+  const windowTrim = material('#343e38', { roughness: 0.55 })
+  const houseTrim = wood('#f4dfb7')
   const mat = {
-    grass: surfaces.earth, path: material('#918572'), stone: material('#888574'),
-    trim: wood('#837060'), wood: wood('#c6a077'), edge: wood('#e0be95'),
-    floor: wood('#ddc7a5'), roof: material('#454d4b'),
+    grass: surfaces.earth, path: surfaces.earth.clone(), stone: material('#a19b87'),
+    trim: wood('#a48361'), wood: wood('#e1b17a'), edge: wood('#f2d3a2'),
+    floor: wood('#ddc7a5'), roof: material('#454c49'),
     glass: material('#c5d7ca', { opacity: 0.10, transparent: true, depthWrite: false, side: T.DoubleSide, roughness: 0.28 }),
-    rug: material('#9c7459'), fabric: material('#d9c7aa'), pillow: material('#697b58'),
+    rug: material('#c29a83'), fabric: material('#f1dfc4'), pillow: material('#91a675'),
     dark: material('#353b33'), paper: material('#f4e4c2'), ink: material('#554a37'),
     lamp: material('#ffd391', { emissive: '#ffab56', emissiveIntensity: 0.95 }),
   }
   const weave = fabricWeave()
+  mat.path.color.set('#bdad8c')
   for (const fabric of [mat.fabric, mat.pillow, mat.rug]) {
     fabric.bumpMap = weave
     fabric.bumpScale = 0.008
@@ -81,21 +90,32 @@ export function createCabin(onMaterialsLoaded) {
     return object
   }
 
-  const sky = new T.HemisphereLight('#dce9ee', '#847959', 1.75)
+  const sky = new T.HemisphereLight('#d9e8f2', '#8b7c5f', 1.35)
   scene.add(sky)
-  const sun = new T.DirectionalLight('#fff0d4', 3.45)
-  sun.position.set(-5, 15, 9)
+  const sun = new T.DirectionalLight('#fff2dd', 3.7)
+  sun.position.set(-7, 14, 10)
   sun.castShadow = true
   sun.shadow.mapSize.set(2048, 2048)
   Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 16, bottom: -16, near: 0.5, far: 45 })
   sun.shadow.normalBias = 0.018
   sun.shadow.bias = -0.0002
   scene.add(sun)
-  const fill = new T.DirectionalLight('#e4ebe3', 0.52)
+  const fill = new T.DirectionalLight('#e3eaf0', 0.4)
   fill.position.set(2, 6, -10)
   scene.add(fill)
 
-  box(scene, mat.grass, 0, -0.28, 0, 135, 0.42, 135, false)
+  // Low wooded hills hide the flat edge of the world while the cabin clearing
+  // stays level. Distant trunk bases sit naturally within the rising ground.
+  const terrain = new T.PlaneGeometry(190, 190, 72, 72)
+  terrain.rotateX(-Math.PI / 2)
+  const groundPoints = terrain.attributes.position
+  for (let i = 0; i < groundPoints.count; i++) {
+    const x = groundPoints.getX(i), z = groundPoints.getZ(i)
+    const rise = T.MathUtils.smoothstep(Math.hypot(x, z), 24, 65)
+    groundPoints.setY(i, -0.07 + rise * (2.8 + Math.sin(x * 0.075) * 1.4 + Math.cos(z * 0.09) * 1.1))
+  }
+  terrain.computeVertexNormals()
+  mesh(scene, terrain, mat.grass, [0, 0, 0], [1, 1, 1], false)
   const path = new T.Shape()
   path.moveTo(1.55, 5.8)
   path.bezierCurveTo(1.65, 8.5, 4, 9, 3.1, 18)
@@ -104,13 +124,20 @@ export function createCabin(onMaterialsLoaded) {
   path.closePath()
   const trail = new T.Mesh(new T.ShapeGeometry(path), mat.path)
   trail.rotation.x = Math.PI / 2
+  trail.scale.set(buildingScale[0], buildingScale[2], 1)
   trail.material.side = T.DoubleSide
   trail.position.y = -0.056
   trail.receiveShadow = true
   scene.add(trail)
 
   const house = group(scene)
-  const planks = ['#c1a07c', '#c7a984', '#b99570', '#be9a73', '#cba983'].map(wood)
+  house.scale.set(...buildingScale)
+  const planks = ['#d9ae7e', '#dfbb8c', '#cda171', '#d5a778', '#e2b885'].map(wood)
+  const facade = ['#fff0d4', '#f0dfbe', '#ffedcd', '#eddab7', '#f5e4c3'].map((color) => {
+    const board = surfaces.cladding.clone()
+    board.color.set(color)
+    return board
+  })
   box(house, mat.trim, 0, 0.03, 0, 9.75, 0.27, 7.7)
   box(house, mat.floor, 0, 0.23, 0, 9.5, 0.16, 7.45)
   box(house, mat.trim, 0, 0.05, 4.85, 10.7, 0.24, 2.65)
@@ -127,6 +154,8 @@ export function createCabin(onMaterialsLoaded) {
     const width = (x2 - x1) / columns
     for (let i = 0; i < columns; i++) {
       box(house, planks[i % 5], x1 + (i + 0.5) * width, (low + high) / 2, z, width - 0.009, high - low, 0.19)
+      box(house, facade[i % 5], x1 + (i + 0.5) * width, (low + high) / 2,
+        z + Math.sign(z) * 0.102, width - 0.009, high - low, 0.018)
     }
   }
   function windowFrame(x1, x2, low, high, z, divisions = 2) {
@@ -135,23 +164,21 @@ export function createCabin(onMaterialsLoaded) {
     const y = (low + high) / 2
     box(house, mat.glass, x, y, z, width, high - low, 0.025, false)
     for (let i = 0; i <= divisions; i++) {
-      box(house, mat.dark, x1 + i * width / divisions, y, z, 0.092, high - low, 0.12)
+      box(house, windowTrim, x1 + i * width / divisions, y, z, 0.092, high - low, 0.12)
     }
-    for (const height of [low, high]) box(house, mat.dark, x, height, z, width + 0.1, 0.09, 0.13)
+    for (const height of [low, high]) box(house, windowTrim, x, height, z, width + 0.1, 0.09, 0.13)
   }
-  siding(-4.75, -3.85, 0.3, 3.55, 3.7)
-  siding(3.85, 4.75, 0.3, 3.55, 3.7)
-  siding(-3.85, 3.85, 3.22, 3.55, 3.7)
-  siding(-3.85, 1.62, 0.3, 0.63, 3.7)
-  siding(3.44, 3.85, 0.3, 0.63, 3.7)
-  windowFrame(-3.85, 1.62, 0.63, 3.22, 3.7, 3)
-  windowFrame(3.44, 3.85, 0.63, 3.22, 3.7, 1)
-  for (const x of [1.62, 3.44]) box(house, mat.trim, x, 1.77, 3.7, 0.12, 2.93, 0.2)
+  siding(-4.75, -2.2, 0.3, 3.55, 3.7)
+  siding(3.44, 4.75, 0.3, 3.55, 3.7)
+  siding(-2.2, 3.44, 3.22, 3.55, 3.7)
+  siding(-2.2, 1.62, 0.3, 0.63, 3.7)
+  windowFrame(-2.2, 1.62, 0.63, 3.22, 3.7, 2)
+  for (const x of [1.62, 3.44]) box(house, houseTrim, x, 1.77, 3.7, 0.12, 2.93, 0.2)
 
   const door = group(house, 1.68, 0.35, 3.72)
   box(door, mat.glass, 0.85, 1.41, 0, 1.67, 2.8, 0.045, false)
-  for (const x of [0, 1.71]) box(door, mat.dark, x, 1.41, 0, 0.11, 2.83, 0.12)
-  for (const y of [0, 2.82]) box(door, mat.dark, 0.85, y, 0, 1.78, 0.105, 0.12)
+  for (const x of [0, 1.71]) box(door, windowTrim, x, 1.41, 0, 0.11, 2.83, 0.12)
+  for (const y of [0, 2.82]) box(door, windowTrim, 0.85, y, 0, 1.78, 0.105, 0.12)
   box(door, mat.edge, 1.53, 1.26, 0.095, 0.052, 0.3, 0.13)
 
   siding(-4.75, -0.62, 0.3, 3.55, -3.7)
@@ -162,24 +189,33 @@ export function createCabin(onMaterialsLoaded) {
   for (const side of [-1, 1]) {
     for (let i = 0; i < 30; i++) {
       const z = -3.62 + i * 0.249
-      if (side > 0 && z > -2.5 && z < 0.15) {
+      const inWindow = side > 0 ? z > -2.5 && z < 0.15 : z > 0.35 && z < 1.8
+      if (inWindow) {
         box(house, planks[i % 5], side * 4.76, 0.62, z, 0.19, 0.65, 0.24)
         box(house, planks[i % 5], side * 4.76, 3.22, z, 0.19, 0.67, 0.24)
+        box(house, facade[i % 5], side * 4.862, 0.62, z, 0.018, 0.65, 0.24)
+        box(house, facade[i % 5], side * 4.862, 3.22, z, 0.018, 0.67, 0.24)
       } else {
         box(house, planks[i % 5], side * 4.76, 1.925, z, 0.19, 3.25, 0.24)
+        box(house, facade[i % 5], side * 4.862, 1.925, z, 0.018, 3.25, 0.24)
       }
     }
-    box(house, mat.trim, side * 4.78, 3.52, 0, 0.22, 0.18, 8.1)
+    box(house, houseTrim, side * 4.78, 3.52, 0, 0.22, 0.18, 8.1)
   }
   const sideWindow = group(house, 4.76, 0, -1.17)
   sideWindow.rotation.y = Math.PI / 2
   box(sideWindow, mat.glass, 0, 1.93, 0, 2.59, 1.95, 0.025, false)
-  for (const x of [-1.31, 0, 1.31]) box(sideWindow, mat.dark, x, 1.93, 0, 0.08, 1.98, 0.12)
-  for (const y of [0.96, 2.91]) box(sideWindow, mat.dark, 0, y, 0, 2.67, 0.09, 0.12)
+  for (const x of [-1.31, 0, 1.31]) box(sideWindow, windowTrim, x, 1.93, 0, 0.08, 1.98, 0.12)
+  for (const y of [0.96, 2.91]) box(sideWindow, windowTrim, 0, y, 0, 2.67, 0.09, 0.12)
+  const leftWindow = group(house, -4.76, 0, 1.11)
+  leftWindow.rotation.y = -Math.PI / 2
+  box(leftWindow, mat.glass, 0, 1.93, 0, 1.49, 1.95, 0.025, false)
+  for (const x of [-0.76, 0.76]) box(leftWindow, windowTrim, x, 1.93, 0, 0.09, 1.98, 0.15)
+  for (const y of [0.96, 2.91]) box(leftWindow, windowTrim, 0, y, 0, 1.62, 0.10, 0.15)
 
   const slope = Math.atan2(2.82, 5.3)
   const roofWidth = Math.hypot(5.3, 2.82)
-  const roofColors = ['#444b48', '#484f4b', '#424945', '#4b514d'].map((color) => material(color))
+  const roofColors = ['#464d49', '#4a504d', '#444b48', '#4c524e'].map((color) => material(color))
   const ceiling = wood('#c09568')
   for (const side of [-1, 1]) {
     const roof = group(house, 0, 6.18, 0)
@@ -198,7 +234,7 @@ export function createCabin(onMaterialsLoaded) {
     for (const z of [-3.5, -1.75, 0, 1.75, 3.5]) {
       box(roof, mat.wood, side * roofWidth / 2, -0.234, z, roofWidth, 0.18, 0.16)
     }
-    for (const z of [-4.37, 4.37]) box(roof, mat.edge, side * roofWidth / 2, -0.08, z, roofWidth + 0.04, 0.25, 0.18)
+    for (const z of [-4.37, 4.37]) box(roof, houseTrim, side * roofWidth / 2, -0.08, z, roofWidth + 0.04, 0.25, 0.18)
   }
   for (const z of [-3.72, 3.72]) {
     const triangle = new T.Shape()
@@ -206,17 +242,54 @@ export function createCabin(onMaterialsLoaded) {
     triangle.lineTo(0, 6.08)
     triangle.lineTo(4.74, 3.5)
     triangle.closePath()
-    const gable = new T.Mesh(new T.ShapeGeometry(triangle), z > 0 ? mat.glass : material('#95643d', { side: T.DoubleSide }))
-    gable.position.z = z
-    house.add(gable)
-    for (const x of [-4.74, 4.74]) beam(house, mat.edge, [0, 6.08, z], [x, 3.5, z], 0.16)
-    beam(house, mat.trim, [0, 3.49, z], [0, 6.09, z], 0.16)
-    box(house, mat.edge, 0, 3.51, z, 9.45, 0.16, 0.2)
+    if (z < 0) {
+      const back = new T.Mesh(new T.ShapeGeometry(triangle), wood('#b99b71'))
+      back.material.side = T.DoubleSide
+      back.position.z = z
+      back.castShadow = back.receiveShadow = true
+      house.add(back)
+    } else {
+      // A framed triangular window sits inside a timber gable, as in the
+      // reference. It is an actual opening, not glass laid over a solid wall.
+      for (let i = 0; i < 38; i++) {
+        const x = -4.625 + i * 0.25
+        const roofTop = 6.08 - (Math.abs(x) + 0.125) * 2.58 / 4.74
+        if (Math.abs(x) < 2.125) {
+          box(house, facade[i % 5], x, 3.78, z, 0.241, 0.56, 0.16)
+          const glassTop = 5.57 - Math.max(0, Math.abs(x) - 0.125) * 1.51 / 2.125
+          const height = Math.max(0.03, roofTop - glassTop)
+          box(house, facade[i % 5], x, glassTop + height / 2, z, 0.241, height, 0.16)
+        } else {
+          box(house, facade[i % 5], x, (3.5 + roofTop) / 2, z, 0.241, roofTop - 3.5, 0.16)
+        }
+      }
+      const glazing = new T.Shape()
+      glazing.moveTo(-2.125, 4.06)
+      glazing.lineTo(0, 5.57)
+      glazing.lineTo(2.125, 4.06)
+      glazing.closePath()
+      const glass = new T.Mesh(new T.ShapeGeometry(glazing), mat.glass)
+      glass.position.z = z + 0.015
+      house.add(glass)
+      for (const x of [-2.125, 2.125]) beam(house, windowTrim, [x, 4.06, z + 0.03], [0, 5.57, z + 0.03], 0.075)
+      beam(house, windowTrim, [0, 4.06, z + 0.03], [0, 5.57, z + 0.03], 0.09)
+      box(house, windowTrim, 0, 4.06, z + 0.03, 4.25, 0.08, 0.1)
+    }
+    for (const x of [-4.74, 4.74]) beam(house, houseTrim, [0, 6.08, z], [x, 3.5, z], 0.16)
+    beam(house, houseTrim, [0, 3.49, z], [0, 6.09, z], 0.16)
+    box(house, houseTrim, 0, 3.51, z, 9.45, 0.16, 0.2)
   }
-  box(house, mat.stone, -2.61, 5.73, -1.05, 0.78, 2.35, 0.73)
-  box(house, mat.dark, -2.61, 6.92, -1.05, 0.97, 0.15, 0.89)
-  box(house, mat.stone, -2.61, 7.08, -1.05, 0.56, 0.23, 0.49)
-  box(house, mat.dark, -2.61, 7.24, -1.05, 0.95, 0.12, 0.88)
+  const chimney = material('#545a55')
+  box(house, chimney, -2.61, 5.73, -1.05, 0.78, 2.35, 0.73)
+  for (let i = 0; i < 14; i++) box(house, mat.dark, -2.61, 4.62 + i * 0.163, -0.68, 0.78, 0.018, 0.012)
+  box(house, mat.dark, -2.61, 6.92, -1.05, 0.89, 0.08, 0.84)
+  for (const x of [-2.96, -2.26]) for (const z of [-1.36, -0.74]) box(house, mat.dark, x, 7.18, z, 0.045, 0.49, 0.045)
+  for (let i = 0; i < 5; i++) {
+    const y = 7.01 + i * 0.084
+    for (const z of [-1.4, -0.7]) box(house, mat.dark, -2.61, y, z, 0.78, 0.035, 0.08)
+    for (const x of [-2.99, -2.23]) box(house, mat.dark, x, y, -1.05, 0.08, 0.035, 0.7)
+  }
+  box(house, mat.dark, -2.61, 7.47, -1.05, 1.02, 0.11, 0.98)
 
   function table(parent, x, y, z, w, d, height, surface = mat.edge) {
     const furniture = group(parent, x, y, z)
@@ -248,12 +321,13 @@ export function createCabin(onMaterialsLoaded) {
     }
     return seat
   }
-  sofa(scene, -2.7, 0.27, 4.55, 2.18)
-  sofa(scene, 4.42, 0.27, 4.9, 0.88, -0.55)
-  table(scene, -2.75, 0.27, 5.57, 1.55, 0.59, 0.36)
-  const flowerPot = new T.CylinderGeometry(0.32, 0.23, 0.43, 12)
-  mesh(scene, flowerPot, mat.stone, [3.91, 0.48, 4.1], [1, 1, 1])
-  mesh(scene, sphere, mat.pillow, [3.91, 0.9, 4.1], [0.39, 0.59, 0.37])
+  sofa(house, -0.5, 0.27, 4.55, 2.45)
+  sofa(house, 4.42, 0.27, 4.9, 0.88, -0.55)
+  table(house, -0.45, 0.27, 5.57, 1.75, 0.62, 0.36)
+  table(house, -2.75, 0.27, 4.64, 1.15, 0.66, 0.76)
+  const footrest = table(house, 4.02, 0.27, 5.74, 0.84, 0.72, 0.32)
+  mesh(footrest, new RoundedBoxGeometry(0.82, 0.18, 0.67, 3, 0.065), mat.fabric, [0, 0.43, 0], [1, 1, 1])
+  addPorchDetails(house)
 
   const inside = group(house)
   box(inside, mat.rug, -2.28, 0.35, -0.48, 3.6, 0.032, 3.55, false)
@@ -283,6 +357,7 @@ export function createCabin(onMaterialsLoaded) {
     box(shelf, [mat.rug, mat.pillow, mat.ink, mat.fabric][i % 4], x, y + h / 2, 0.014, 0.115, h, 0.22)
   }
   const desk = table(inside, 1.65, 0.36, -2.6, 2.65, 1.38, 0.5)
+  addWindowDetails(inside)
   sofa(inside, 2.48, 0.36, -1.32, 0.72, Math.PI)
   const page = box(desk, mat.paper, 0.05, 0.562, 0.28, 0.94, 0.016, 0.63, false)
   page.rotation.y = -0.075
@@ -321,8 +396,8 @@ export function createCabin(onMaterialsLoaded) {
     house.add(sconce, sconce.target)
   }
 
-  const mailbox = group(scene, 5.85, 0, 6.45)
-  const mailboxGreen = material('#47624a')
+  const mailbox = group(house, 5.85, 0, 6.45)
+  const mailboxGreen = material('#626358', { roughness: 0.8 })
   box(mailbox, mat.trim, 0, 0.63, 0, 0.16, 1.36, 0.19)
   box(mailbox, mailboxGreen, 0, 1.46, 0, 0.79, 0.52, 0.6)
   const lid = new T.CylinderGeometry(0.403, 0.403, 0.6, 24, 1, false, 0, Math.PI)
@@ -332,7 +407,7 @@ export function createCabin(onMaterialsLoaded) {
   box(mailbox, mat.edge, 0, 1.38, 0.312, 0.28, 0.055, 0.026)
   const envelope = box(mailbox, mat.paper, 0.055, 1.61, 0.44, 0.35, 0.23, 0.028)
   envelope.rotation.x = 0.55
-  const perch = group(scene, 6.67, 0, 5.82)
+  const perch = group(house, 6.67, 0, 5.82)
   box(perch, mat.trim, 0, 0.78, 0, 0.145, 1.56, 0.15)
   box(perch, mat.edge, 0, 1.57, 0, 0.91, 0.085, 0.19)
   beam(perch, mat.wood, [0, 1.18, 0], [0.33, 1.53, 0], 0.058)
@@ -354,6 +429,7 @@ export function createCabin(onMaterialsLoaded) {
     treePoints.push([x, z, h])
   }
   treePoints.push([-14, 3, 15], [-8, -4, 14], [10.5, -2, 16], [-3, -11, 14], [4.3, -10.7, 13])
+  treePoints.push([-12.8, 6, 18], [6.5, 11, 19])
   for (let i = 0; i < 52; i++) {
     const angle = i * Math.PI * 2 / 52
     const distance = 48 + rng() * 18
@@ -376,7 +452,6 @@ export function createCabin(onMaterialsLoaded) {
     return objects
   }
   const shrubs = []
-  const blooms = []
   const blades = []
   const gravel = []
   const blade = new T.BufferGeometry()
@@ -387,32 +462,48 @@ export function createCabin(onMaterialsLoaded) {
     0.02, -0.5, 0.20, 0.18, -0.5, 0.31, 0.21, 0.3, 0.57,
   ], 3))
   blade.computeVertexNormals()
-  for (let i = 0; i < 22000; i++) {
+  for (let i = 0; i < 38000; i++) {
     const x = (rng() - 0.5) * 45
     const z = (rng() - 0.55) * 40
-    if (Math.abs(x) < 5.5 && z > -4 && z < 6.3 || x > 1.5 && x < 6.4 && z >= 6.3) continue
-    const h = 0.12 + rng() * 0.43
-    blades.push({ p: [x, h * 0.43 - 0.055, z], s: [0.09 + rng() * 0.1, h, 0.09 + rng() * 0.1], c: ['#6a8043', '#8b9b4e', '#4c6c40'][i % 3] })
+    const bx = x / buildingScale[0], bz = z / buildingScale[2]
+    if (Math.abs(bx) < 5.5 && bz > -4 && bz < 6.3 || bx > 1.5 && bx < 6.4 && bz >= 6.3) continue
+    // Broad patches leave leaf litter visible between clumps; the clearing is
+    // short grass, with taller growth toward the woodland edge.
+    const patch = Math.sin(x * 0.53 + Math.sin(z * 0.41)) * Math.cos(z * 0.67 - x * 0.17)
+    if (patch < -0.48 || rng() > 0.78 + patch * 0.2) continue
+    const edge = Math.min(1, Math.max(0, (Math.hypot(x, z) - 8) / 10))
+    const h = 0.10 + rng() * (0.19 + edge * 0.21)
+    blades.push({ p: [x, h * 0.43 - 0.055, z], s: [0.12 + rng() * 0.14, h, 0.12 + rng() * 0.14], c: ['#56713e', '#81954e', '#47683b', '#6c8546'][i % 4] })
     if (i % 130 === 0) shrubs.push({ p: [x, 0.17, z], s: [0.48, 0.33 + rng() * 0.4, 0.44] })
-  }
-  for (const [cx, cz] of [[-6.1, 4.1], [-4.7, 7.7], [7.2, 4], [6.2, 9.5], [-2.7, 8.9], [7.4, -2.3]]) {
-    for (let i = 0; i < 36; i++) {
-      const x = cx + (rng() - 0.5) * 2.8
-      const z = cz + (rng() - 0.5) * 2
-      const y = 0.2 + rng() * 0.34
-      blades.push({ p: [x, y / 2, z], s: [0.055, y, 0.07], c: '#70884a' })
-      blooms.push({ p: [x, y, z], s: [0.065, 0.045, 0.066], c: ['#e8c77f', '#d4a28e', '#a49abf', '#efe1ba'][i % 4] })
-    }
   }
   for (let i = 0; i < 100; i++) {
     const z = 6.9 + rng() * 9.6
     const x = 1.8 + 1.5 * (1 - Math.exp(-(z - 6.9) * 0.48)) + rng() * 2
     const size = 0.03 + rng() * 0.075
-    gravel.push({ p: [x, -0.042, z], s: [size, size * 0.4, size * 1.6], c: ['#a29376', '#c3b79b', '#aca28d'][i % 3] })
+    gravel.push({ p: buildingPoint([x, -0.042, z]), s: [size, size * 0.4, size * 1.6], c: ['#726955', '#8d8067', '#7d765f'][i % 3] })
+  }
+  // A low understory behind the clearing gives the window a leafy middle
+  // distance instead of a row of bare trunks against the horizon.
+  for (let i = 0; i < 210; i++) {
+    const angle = Math.PI / 2 + rng() * Math.PI
+    const distance = 19 + rng() * 15
+    shrubs.push({ p: [Math.sin(angle) * distance, 1.1, Math.cos(angle) * distance],
+      s: [1.6 + rng() * 1.1, 1.6, 1.8] })
+  }
+  // Close the exposed sides of the distant clearing as well as its back.
+  // The orbit camera stays inside this ring, keeping the entrance unobscured.
+  for (let i = 0; i < 120; i++) {
+    const angle = rng() * Math.PI * 2
+    const distance = 30 + rng() * 13
+    const x = Math.sin(angle) * distance, z = Math.cos(angle) * distance
+    const ground = T.MathUtils.smoothstep(distance, 24, 65) * (2.8 + Math.sin(x * 0.075) * 1.4 + Math.cos(z * 0.09) * 1.1)
+    shrubs.push({ p: [x, ground + 1.5, z], s: [2.1 + rng(), 2.1, 2] })
   }
   instances(blade, blades).material.side = T.DoubleSide
   addForest(scene, treePoints, shrubs, surfaces.bark, rng)
-  instances(sphere, blooms)
+  const garden = group(scene)
+  garden.scale.set(...buildingScale)
+  addGarden(garden)
   instances(sphere, gravel)
 
   // Batch static planks and furniture. The moving door and unread envelope

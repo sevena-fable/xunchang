@@ -5,37 +5,37 @@ function foliageTexture(random) {
   canvas.width = canvas.height = 256
   const ctx = canvas.getContext('2d')
   ctx.lineCap = 'round'
-  for (let branch = 0; branch < 5; branch++) {
-    const angle = branch * 1.22 + random() * 0.4
+  for (let branch = 0; branch < 3; branch++) {
+    const angle = -0.65 + branch * 0.65 + (random() - 0.5) * 0.3
     ctx.save()
-    ctx.translate(128, 140)
+    ctx.translate(128, 218)
     ctx.rotate(angle)
     ctx.strokeStyle = '#665d34'
     ctx.lineWidth = 2
     ctx.beginPath()
     ctx.moveTo(0, 0)
-    ctx.quadraticCurveTo(12, -30, 3, -95)
+    ctx.quadraticCurveTo(12, -60, 3, -170)
     ctx.stroke()
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 10; i++) {
       const side = i % 2 ? 1 : -1
       ctx.save()
-      ctx.translate(4 + side * 10, -14 - i * 11)
-      ctx.rotate(side * 0.9)
+      ctx.translate(4 + side * (9 + random() * 6), -18 - i * 15)
+      ctx.rotate(side * (0.65 + random() * 0.45))
       const gradient = ctx.createLinearGradient(-10, 0, 10, 0)
-      gradient.addColorStop(0, '#546d35')
-      gradient.addColorStop(0.48, ['#9bb35f', '#87a24a', '#a9bd6e'][i % 3])
-      gradient.addColorStop(1, '#667e3c')
+      gradient.addColorStop(0, '#648b3b')
+      gradient.addColorStop(0.48, ['#bdd77c', '#a9c665', '#d0df91'][i % 3])
+      gradient.addColorStop(1, '#86a750')
       ctx.fillStyle = gradient
       ctx.beginPath()
       ctx.moveTo(0, 5)
-      ctx.bezierCurveTo(-15, -4, -12, -20, 0, -29)
-      ctx.bezierCurveTo(12, -20, 15, -4, 0, 5)
+      ctx.bezierCurveTo(-11, -4, -10, -17, 0, -24)
+      ctx.bezierCurveTo(10, -17, 11, -4, 0, 5)
       ctx.fill()
       ctx.strokeStyle = '#d4c98260'
       ctx.lineWidth = 0.6
       ctx.beginPath()
       ctx.moveTo(0, 4)
-      ctx.lineTo(0, -26)
+      ctx.lineTo(0, -22)
       ctx.stroke()
       ctx.restore()
     }
@@ -78,10 +78,10 @@ export function addForest(scene, treePoints, shrubs, bark, random) {
     branch([x, -0.05, z], [x + lean * 0.3, height * 0.46, z], radius)
     branch([x + lean * 0.3, height * 0.46, z], [x + lean, height * 0.89, z + 0.35], radius * 0.65)
     const distant = Math.hypot(x, z) > 40
-    const branchCount = distant ? 10 : 18
+    const branchCount = distant ? 10 : 22
     for (let i = 0; i < branchCount; i++) {
       const angle = i * 2.399 + random() * 0.45
-      const level = 0.40 + i / (branchCount * 1.89)
+      const level = 0.49 + i / (branchCount * 2.3)
       const length = height * (0.12 + random() * 0.1) * (1.3 - level * 0.6)
       const start = [x + lean * level, height * level, z]
       const end = [start[0] + Math.cos(angle) * length, start[1] + length * 0.48, z + Math.sin(angle) * length]
@@ -112,10 +112,10 @@ export function addForest(scene, treePoints, shrubs, bark, random) {
   }
   batch(new T.CylinderGeometry(0.28, 0.5, 1, 9, 2), bark, branches)
   const leaves = new T.MeshStandardMaterial({
-    color: '#b5c795', map: foliageTexture(random), roughness: 0.92,
-    emissive: '#4d612a', emissiveIntensity: 0.06,
+    color: '#c5d6ac', map: foliageTexture(random), roughness: 0.94,
+    emissive: '#48652e', emissiveIntensity: 0.025,
     alphaTest: 0.45, side: T.DoubleSide,
   })
   const crown = batch(new T.PlaneGeometry(1, 1), leaves, foliage)
-  foliage.forEach((_, index) => crown.setColorAt(index, new T.Color().setHSL(0.2 + random() * 0.06, 0.13, 0.66 + random() * 0.25)))
+  foliage.forEach((_, index) => crown.setColorAt(index, new T.Color().setHSL(0.19 + random() * 0.055, 0.2, 0.79 + random() * 0.19)))
 }
