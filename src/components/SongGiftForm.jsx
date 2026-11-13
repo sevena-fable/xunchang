@@ -143,7 +143,7 @@ export default function SongGiftForm({ busy, pair, userId, actions, runAction })
           add(files)
         }} />
         <button type="button" className="panel-link" disabled={disabled} onClick={() => picker.current.click()}>选择音频文件</button>
-        <p className="text-xs text-[var(--panel-muted)]">自动保存，每首最多 6 MB。</p>
+        <p className="text-xs text-[var(--panel-muted)]">选中后自动保存。</p>
       </div>
       <form onSubmit={submitLink} className="space-y-2">
         <label className="block text-xs text-[var(--panel-muted)]">或粘贴 HTTPS 音频直链

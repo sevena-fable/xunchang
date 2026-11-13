@@ -3,7 +3,6 @@ import { catalogGiftId } from './catalogGiftId'
 
 const bucket = supabase.storage.from('song-gifts')
 export const audioTypes = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg' }
-export const maxAudioBytes = 6 * 1024 * 1024
 
 function validateAudio(source, objectUrl = false, expectedDuration) {
   return new Promise((resolve, reject) => {
@@ -47,7 +46,7 @@ export async function sendSongGift({ pair, userId, file, link, catalogTrack }) {
     const extension = file.name.toLowerCase().split('.').pop()
     const contentType = audioTypes[extension]
     if (!Object.hasOwn(audioTypes, extension)) throw new Error('请选择 MP3、M4A、WAV 或 OGG 文件。')
-    if (!file.size || file.size > maxAudioBytes) throw new Error('音频文件须大于 0 且不超过 6 MB。')
+    if (!file.size) throw new Error('请选择非空的音频文件。')
     await validateAudio(URL.createObjectURL(file), true, catalogTrack?.expectedDuration)
     gift.storage_path = `${pair.id}/${userId}/${id}.${extension}`
     gift.title = file.name.replace(/\.[^.]+$/, '').trim().slice(0, 200) || null
